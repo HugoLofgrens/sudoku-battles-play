@@ -1,0 +1,673 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sudoku</title>
+<style>
+:root{--bg:#14161b;--cell:#22262f;--dead:#15171c;--line:#3a404d;--thick:#a2aaba;--given:#eef0f5;--user:#7cc4ff;--note:#8b93a3;--hi:#f2b632;--hi-ink:#17130a;--bad:#ff5d5d;--s:min(94vw,calc(100vh - 170px))}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--given);font:16px system-ui,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:8px;user-select:none;-webkit-tap-highlight-color:transparent}
+#wrap{position:relative;width:var(--s)}
+#board{width:100%;aspect-ratio:1;display:grid;grid-template-columns:repeat(9,1fr);grid-template-rows:repeat(9,1fr);border:3px solid var(--thick);border-radius:4px;overflow:hidden}
+.c{position:relative;display:flex;align-items:center;justify-content:center;background:var(--cell);border:solid var(--line);border-width:0 1px 1px 0;font-size:calc(var(--s)*.058);cursor:pointer;min-width:0;min-height:0}
+.c.r{border-right:2px solid var(--thick)}
+.c.b{border-bottom:2px solid var(--thick)}
+.c.given{font-weight:700}
+.c.user{color:var(--user);font-weight:500}
+.c.peer{background:#2a2f3a}
+.c.dead{background:var(--dead)}
+.c.cand{background:#4a3f1f;box-shadow:inset 0 0 0 1px #f2b63266}
+.c.same{background:var(--hi);color:var(--hi-ink)}
+.c.bad{color:var(--bad)}
+.c.same.bad{background:var(--bad);color:#200}
+.c.sel{box-shadow:inset 0 0 0 3px #fff}
+.n{position:absolute;inset:1px;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);font-size:calc(var(--s)*.021);color:var(--note);font-weight:500}
+.n span{display:flex;align-items:center;justify-content:center;border-radius:3px}
+.n .on{background:var(--hi);color:var(--hi-ink);font-weight:700}
+#pad{width:var(--s);display:grid;grid-template-columns:repeat(9,1fr);gap:4px}
+#tools{width:var(--s);display:flex;gap:4px}
+#tools button{flex:1}
+#leave,body.battle #undo,body.battle #new,body.battle #battle{display:none}
+body.battle #leave{display:block}
+button{background:var(--cell);color:var(--given);border:1px solid var(--line);border-radius:6px;font:inherit;cursor:pointer;padding:7px 0}
+button:hover{border-color:var(--thick)}
+#pad button{display:flex;flex-direction:column;align-items:center;line-height:1.1;font-size:20px;font-weight:600;padding:5px 0}
+#pad small{font-size:11px;font-weight:400;color:var(--note)}
+#pad .on{background:var(--hi);color:var(--hi-ink);border-color:var(--hi)}
+#pad .on small{color:var(--hi-ink)}
+#pad .done{opacity:.3}
+#notes.on{background:var(--user);color:#06121d;border-color:var(--user)}
+#msg{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:#14161bcc;font-size:24px;font-weight:600;border-radius:4px}
+#msg.show{display:flex}
+body.battle{--s:min(94vw,calc(100vh - 205px))}
+#hud{display:none;width:var(--s);justify-content:space-between;align-items:baseline;gap:8px;font-weight:600}
+body.battle #hud{display:flex}
+#hud-score,#hud-clock{font-size:22px;font-variant-numeric:tabular-nums}
+#hud-last{font-size:14px;color:var(--hi);text-align:center}
+.c.fog{background:repeating-linear-gradient(45deg,#2c303b 0 6px,#1a1c22 6px 12px);cursor:not-allowed}
+.c.miss{background:var(--bad);color:#200}
+#pad .locked{opacity:.3;text-decoration:line-through}
+#panel{position:fixed;inset:0;z-index:5;display:none;align-items:center;justify-content:center;padding:16px;overflow:auto;background:var(--bg)}
+#panel.show{display:flex}
+.card{width:min(440px,100%);margin:auto;display:flex;flex-direction:column;gap:10px}
+.card h2,.card p{margin:0}
+.card label{display:flex;flex-direction:column;gap:4px}
+.card input,.card textarea{width:100%;padding:8px;background:var(--cell);color:var(--given);border:1px solid var(--line);border-radius:6px;font:inherit;user-select:text}
+.card textarea{resize:none;font-size:12px;word-break:break-all}
+.card button{padding:10px}
+.card .main{background:var(--hi);color:var(--hi-ink);border-color:var(--hi);font-weight:700}
+.card small{color:var(--note)}
+.dim{color:var(--note);font-size:14px}
+.err{color:var(--bad)}
+.tally{font-weight:700;font-size:18px}
+</style>
+</head>
+<body>
+<div id="hud"><span id="hud-score"></span><span id="hud-last"></span><span id="hud-clock"></span></div>
+<div id="wrap"><div id="board"></div><div id="msg"></div></div>
+<div id="pad"></div>
+<div id="tools">
+  <button id="undo" title="Ctrl+Z">Undo</button>
+  <button id="erase" title="Backspace">Erase</button>
+  <button id="notes" title="N (or hold Shift + digit)">Notes</button>
+  <button id="new">New</button>
+  <button id="battle">Battle</button>
+  <button id="leave">Leave</button>
+</div>
+<div id="panel"></div>
+<script>
+// ---------- geometry ----------
+const ALL = 0x3FE, IDX = [...Array(81).keys()];
+const rowOf = i => i / 9 | 0, colOf = i => i % 9, boxOf = i => (rowOf(i) / 3 | 0) * 3 + (colOf(i) / 3 | 0);
+const HOUSES = [];
+for (let k = 0; k < 9; k++) HOUSES.push(IDX.filter(i => rowOf(i) === k));
+for (let k = 0; k < 9; k++) HOUSES.push(IDX.filter(i => colOf(i) === k));
+for (let k = 0; k < 9; k++) HOUSES.push(IDX.filter(i => boxOf(i) === k));
+const PEERS = IDX.map(i => IDX.filter(j => j !== i && (rowOf(j) === rowOf(i) || colOf(j) === colOf(i) || boxOf(j) === boxOf(i))));
+const pop = m => { let n = 0; while (m) { m &= m - 1; n++; } return n; };
+// sfc32: integer-only, so one seed gives one puzzle on every device and in any language.
+function makeRng(seed) {
+  let a = 0x9E3779B9, b = 0x243F6A88, c = 0xB7E15162, d = seed >>> 0;
+  const next = () => {
+    const t = (((a + b) | 0) + d) | 0;
+    d = (d + 1) | 0; a = b ^ (b >>> 9); b = (c + (c << 3)) | 0; c = (c << 21) | (c >>> 11); c = (c + t) | 0;
+    return t >>> 0;
+  };
+  for (let i = 0; i < 15; i++) next();
+  return next;
+}
+const shuffle = (a, rng) => { for (let i = a.length - 1; i > 0; i--) { const j = rng() % (i + 1); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const combos = (a, k, s = 0, cur = [], out = []) => {
+  if (cur.length === k) { out.push(cur.slice()); return out; }
+  for (let i = s; i < a.length; i++) { cur.push(a[i]); combos(a, k, i + 1, cur, out); cur.pop(); }
+  return out;
+};
+
+// ---------- brute-force solver (uniqueness + grid fill) ----------
+// Gives up after maxNodes and returns count -1. A step limit, not a clock, so every device agrees.
+const NODE_LIMIT = 20000;
+function solve(grid, limit = 2, rng = null, maxNodes = NODE_LIMIT) {
+  const g = grid.slice(), R = Array(9).fill(0), C = Array(9).fill(0), B = Array(9).fill(0), empties = [];
+  for (const i of IDX) {
+    if (g[i]) { const b = 1 << g[i]; R[rowOf(i)] |= b; C[colOf(i)] |= b; B[boxOf(i)] |= b; } else empties.push(i);
+  }
+  let count = 0, first = null, nodes = 0, aborted = false;
+  (function rec() {
+    if (++nodes > maxNodes) { aborted = true; return; }
+    let best = -1, bestM = 0, bestN = 10;
+    for (const i of empties) {
+      if (g[i]) continue;
+      const m = ALL & ~(R[rowOf(i)] | C[colOf(i)] | B[boxOf(i)]), n = pop(m);
+      if (n < bestN) { best = i; bestM = m; bestN = n; if (n <= 1) break; }
+    }
+    if (best < 0) { count++; if (!first) first = g.slice(); return; }
+    const ds = []; for (let d = 1; d <= 9; d++) if (bestM >> d & 1) ds.push(d);
+    if (rng) shuffle(ds, rng);
+    const r = rowOf(best), c = colOf(best), x = boxOf(best);
+    for (const d of ds) {
+      const b = 1 << d;
+      g[best] = d; R[r] |= b; C[c] |= b; B[x] |= b;
+      rec();
+      g[best] = 0; R[r] &= ~b; C[c] &= ~b; B[x] &= ~b;
+      if (count >= limit || aborted) return;
+    }
+  })();
+  return { count: aborted ? -1 : count, first };
+}
+
+// ---------- human-technique grader: rejects easy puzzles and ones that need guessing ----------
+function grade(p) {
+  const g = p.slice(), c = Array(81).fill(0);
+  for (const i of IDX) if (!g[i]) { let m = ALL; for (const j of PEERS[i]) if (g[j]) m &= ~(1 << g[j]); c[i] = m; }
+  const put = (i, d) => { g[i] = d; c[i] = 0; for (const j of PEERS[i]) c[j] &= ~(1 << d); };
+  const strip = (cells, mask) => { let ch = false; for (const i of cells) if (c[i] & mask) { c[i] &= ~mask; ch = true; } return ch; };
+
+  function singles() {
+    for (const i of IDX) if (pop(c[i]) === 1) { put(i, 31 - Math.clz32(c[i])); return true; }
+    for (const h of HOUSES) for (let d = 1; d <= 9; d++) {
+      const s = h.filter(i => c[i] >> d & 1);
+      if (s.length === 1) { put(s[0], d); return true; }
+    }
+    return false;
+  }
+  function locked() {
+    for (const h of HOUSES) for (let d = 1; d <= 9; d++) {
+      const s = h.filter(i => c[i] >> d & 1);
+      if (s.length < 2) continue;
+      for (const o of HOUSES) {
+        if (o === h || !s.every(i => o.includes(i))) continue;
+        if (strip(o.filter(i => !s.includes(i)), 1 << d)) return true;
+      }
+    }
+    return false;
+  }
+  function subsets(k) {
+    for (const h of HOUSES) {
+      const open = h.filter(i => c[i]);
+      if (open.length <= k) continue;
+      for (const set of combos(open, k)) {            // naked
+        const u = set.reduce((m, i) => m | c[i], 0);
+        if (pop(u) === k && strip(open.filter(i => !set.includes(i)), u)) return true;
+      }
+      const digits = []; for (let d = 1; d <= 9; d++) if (open.some(i => c[i] >> d & 1)) digits.push(d);
+      for (const set of combos(digits, k)) {          // hidden
+        const mask = set.reduce((m, d) => m | 1 << d, 0), cells = open.filter(i => c[i] & mask);
+        if (cells.length === k && set.every(d => cells.some(i => c[i] >> d & 1)) && strip(cells, ALL & ~mask)) return true;
+      }
+    }
+    return false;
+  }
+  function xwing() {
+    for (const [from, to] of [[0, 9], [9, 0]]) for (let d = 1; d <= 9; d++) {
+      const pos = [];
+      for (let k = 0; k < 9; k++) { const p = []; HOUSES[from + k].forEach((i, n) => { if (c[i] >> d & 1) p.push(n); }); pos.push(p); }
+      for (let a = 0; a < 9; a++) if (pos[a].length === 2) for (let b = a + 1; b < 9; b++) {
+        if (pos[b].length !== 2 || pos[b][0] !== pos[a][0] || pos[b][1] !== pos[a][1]) continue;
+        const skip = new Set([...HOUSES[from + a], ...HOUSES[from + b]]);
+        let ch = false;
+        for (const n of pos[a]) ch = strip(HOUSES[to + n].filter(i => !skip.has(i)), 1 << d) || ch;
+        if (ch) return true;
+      }
+    }
+    return false;
+  }
+
+  let level = 0, hard = 0;
+  const steps = [[singles, 1], [locked, 2], [() => subsets(2), 3], [() => subsets(3), 4], [xwing, 5]];
+  for (;;) {
+    if (g.every(Boolean)) return { solved: true, level, hard };
+    let moved = false;
+    for (const [fn, lv] of steps) if (fn()) { level = Math.max(level, lv); if (lv >= 3) hard++; moved = true; break; }
+    if (!moved) return { solved: false, level, hard };
+  }
+}
+
+// ---------- generator ----------
+function dig(rng, minClues = 0) {
+  let sol = null;
+  while (!sol) sol = solve(Array(81).fill(0), 1, rng).first;
+  const g = sol.slice();
+  for (const i of shuffle(IDX.filter(i => i <= 40), rng)) {
+    if (g.filter(Boolean).length <= minClues) break;
+    const j = 80 - i, a = g[i], b = g[j];
+    g[i] = g[j] = 0;
+    if (solve(g, 2).count !== 1) { g[i] = a; g[j] = b; }
+  }
+  return { puzzle: g, solution: sol };
+}
+// Bump when anything above changes: the same seed then gives a different puzzle.
+const GENERATOR_VERSION = 1, MIN_HARD = 3;
+const accepted = r => r.solved && (r.level >= 4 || r.hard >= MIN_HARD);
+// Time only decides when it yields to the UI, never which puzzle comes out.
+function generate(seed, done) {
+  const rng = makeRng(seed);
+  (function step() {
+    for (const t = Date.now(); Date.now() - t < 40;) {
+      const d = dig(rng);
+      if (accepted(grade(d.puzzle))) return done(d);
+    }
+    setTimeout(step);
+  })();
+}
+
+// ---------- game state ----------
+let given, solution, v, n, sel = null, active = null, hover = null, noteMode = false, undoStack = [], won = false, busy = false, curSeed = null;
+const KEY = 'sudoku-hard-v2';
+const $ = id => document.getElementById(id);
+const save = () => { if (mode === 'battle') return saveBattle(); try { localStorage.setItem(KEY, JSON.stringify({ seed: curSeed, given, solution, v, n })); } catch (e) {} };
+const snap = () => undoStack.push({ v: v.slice(), n: n.slice() });
+
+function newGame(seed = crypto.getRandomValues(new Uint32Array(1))[0]) {
+  busy = true; won = false; $('msg').textContent = 'Generating…'; $('msg').classList.add('show');
+  setTimeout(() => generate(seed, d => {
+    given = d.puzzle.slice(); solution = d.solution; v = d.puzzle.slice(); n = Array(81).fill(0);
+    sel = active = hover = null; noteMode = false; undoStack = []; won = false; busy = false;
+    curSeed = seed; location.hash = seed;
+    $('msg').classList.remove('show'); save(); render();
+  }), 20);
+}
+function checkWin() {
+  won = v.every((x, i) => x === solution[i]);
+  if (won) { sel = null; $('msg').textContent = 'Solved!'; $('msg').classList.add('show'); }
+}
+function place(i, d) {
+  if (mode === 'battle') return battlePlace(i, d);
+  snap(); v[i] = d; n[i] = 0;
+  for (const j of PEERS[i]) n[j] &= ~(1 << d);
+  sel = null; active = d; checkWin(); save();
+}
+function toggleNote(i, d) { snap(); n[i] ^= 1 << d; active = d; save(); }
+function digit(d, forceNote) {
+  if (busy || won) return;
+  if (sel !== null && !v[sel]) {
+    if (noteMode || forceNote) toggleNote(sel, d); else place(sel, d);
+  } else {
+    active = sel === null && active === d ? null : d;
+    sel = null;
+  }
+  render();
+}
+function clickCell(i) {
+  if (busy || won) return;
+  if (curseOn('fog') && boxOf(i) === B.fogBox) return;
+  if (v[i]) { sel = i; active = v[i]; }
+  else if (sel === i && active) {
+    if (noteMode) toggleNote(i, active); else place(i, active);
+  } else sel = i;
+  render();
+}
+function erase() {
+  if (busy || won || sel === null || given[sel] || (!v[sel] && !n[sel])) return;
+  if (mode === 'battle' && v[sel]) return;
+  snap(); v[sel] = 0; n[sel] = 0; save(); render();
+}
+function undo() {
+  if (busy || won || mode === 'battle' || !undoStack.length) return;
+  const s = undoStack.pop(); v = s.v; n = s.n; save(); render();
+}
+function move(dr, dc) {
+  if (busy || won) return;
+  if (sel === null) sel = 40;
+  else sel = ((rowOf(sel) + dr + 9) % 9) * 9 + (colOf(sel) + dc + 9) % 9;
+  if (v[sel]) active = v[sel];
+  render();
+}
+
+// ---------- view ----------
+const cells = IDX.map(i => {
+  const e = document.createElement('div');
+  e.className = 'c';
+  e.addEventListener('click', () => clickCell(i));
+  $('board').append(e);
+  return e;
+});
+const padBtns = [];
+for (let d = 1; d <= 9; d++) {
+  const b = document.createElement('button');
+  b.innerHTML = d + '<small></small>';
+  b.addEventListener('click', e => digit(d, e.shiftKey));
+  if (matchMedia('(hover:hover)').matches) {
+    b.addEventListener('mouseenter', () => { hover = d; render(); });
+    b.addEventListener('mouseleave', () => { hover = null; render(); });
+  }
+  $('pad').append(b);
+  padBtns[d] = b;
+}
+
+function render() {
+  if (!v) return;
+  const show = curseOn('blind') ? null : hover || active;
+  const fogged = curseOn('fog');
+  const missing = mode === 'battle' && Date.now() < B.lockUntil ? B.flash : -1;
+  const bad = IDX.map(i => v[i] && !given[i] ? PEERS[i].some(j => v[j] === v[i]) : false);
+  const blocked = show ? IDX.map(i => PEERS[i].some(j => v[j] === show)) : null;
+  for (const i of IDX) {
+    const e = cells[i], x = v[i];
+    let cl = 'c';
+    if (colOf(i) % 3 === 2 && colOf(i) < 8) cl += ' r';
+    if (rowOf(i) % 3 === 2 && rowOf(i) < 8) cl += ' b';
+    if (fogged && boxOf(i) === B.fogBox) {
+      e.className = cl + ' fog';
+      e.textContent = '';
+      continue;
+    }
+    if (i === missing) cl += ' miss';
+    if (given[i]) cl += ' given'; else if (x) cl += ' user';
+    if (bad[i]) cl += ' bad';
+    if (show) {
+      if (x === show) cl += ' same';
+      else if (x) cl += ' dead';
+      else cl += blocked[i] ? ' dead' : ' cand';
+    } else if (sel !== null && PEERS[sel].includes(i)) cl += ' peer';
+    if (i === sel) cl += ' sel';
+    e.className = cl;
+    if (x) e.textContent = x;
+    else if (n[i]) {
+      let h = '<div class="n">';
+      for (let d = 1; d <= 9; d++) h += `<span${n[i] >> d & 1 && d === show ? ' class="on"' : ''}>${n[i] >> d & 1 ? d : ''}</span>`;
+      e.innerHTML = h + '</div>';
+    } else e.textContent = '';
+  }
+  for (let d = 1; d <= 9; d++) {
+    const left = 9 - v.filter(x => x === d).length;
+    padBtns[d].className = (d === show ? 'on ' : '') + (left <= 0 ? 'done ' : '') + (curseOn('jinx') && d === B.jinxDigit ? 'locked' : '');
+    padBtns[d].lastChild.textContent = left > 0 ? left : '✓';
+  }
+  $('notes').classList.toggle('on', noteMode);
+}
+
+// ---------- input ----------
+document.addEventListener('mousedown', e => { if (e.target.closest('button')) e.preventDefault(); });
+document.addEventListener('click', e => {
+  if (!e.target.closest('#board,#pad,#tools') && sel !== null) { sel = null; render(); }
+});
+$('undo').onclick = undo;
+$('erase').onclick = erase;
+$('notes').onclick = () => { noteMode = !noteMode; render(); };
+$('new').onclick = () => {
+  if (busy) return;
+  if (won || undoStack.length === 0 || confirm('Start a new puzzle?')) newGame();
+};
+document.addEventListener('keydown', e => {
+  if (e.target.closest && e.target.closest('input,textarea')) return;
+  const m = /^(?:Digit|Numpad)([1-9])$/.exec(e.code);
+  let hit = true;
+  if (m && !e.ctrlKey && !e.metaKey && !e.altKey) digit(+m[1], e.shiftKey);
+  else if ((e.ctrlKey || e.metaKey) && e.code === 'KeyZ') undo();
+  else if (e.ctrlKey || e.metaKey || e.altKey) hit = false;
+  else if (e.key === 'ArrowUp') move(-1, 0);
+  else if (e.key === 'ArrowDown') move(1, 0);
+  else if (e.key === 'ArrowLeft') move(0, -1);
+  else if (e.key === 'ArrowRight') move(0, 1);
+  else if (e.key === 'Backspace' || e.key === 'Delete' || e.key === '0') erase();
+  else if (e.code === 'KeyN') { noteMode = !noteMode; render(); }
+  else if (e.code === 'KeyU') undo();
+  else if (e.key === 'Escape') { sel = active = null; render(); }
+  else if ((e.key === 'Enter' || e.key === ' ') && sel !== null && !v[sel] && active && !busy && !won) {
+    if (noteMode) toggleNote(sel, active); else place(sel, active);
+    render();
+  } else hit = false;
+  if (hit) e.preventDefault();
+});
+
+// ---------- battle prototype: no server, the link carries the whole match ----------
+// A plays, sends a link, B plays the same puzzle and compares. First to 2 rounds wins.
+// Round 1 has no curses, so each match compares plain play with cursed play.
+const BATTLE = { limit: 300, clues: 36, right: 10, house: 30, wrong: -20, lockMs: 2000, winRounds: 2 };
+const CURSES = {
+  fog: { name: 'Fog', secs: 90, text: 'The fullest box is hidden for 90 seconds.' },
+  blind: { name: 'Blind', secs: 120, text: 'No number highlighting for 2 minutes.' },
+  jinx: { name: 'Jinx', secs: 60, text: 'The most needed number is locked for 60 seconds.' }
+};
+const BKEY = 'sudoku-battle-v1', NAME_KEY = 'sudoku-name';
+let mode = 'solo', B = null, tickKey = '';
+
+const randomSeed = () => crypto.getRandomValues(new Uint32Array(1))[0];
+const esc = s => String(s).replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) + ';');
+const cleanName = s => String(s == null ? '' : s).replace(/[^\p{L}\p{N} _.-]/gu, '').trim().slice(0, 12);
+const myName = () => { try { return cleanName(localStorage.getItem(NAME_KEY)); } catch (e) { return ''; } };
+const setName = s => { try { localStorage.setItem(NAME_KEY, cleanName(s)); } catch (e) {} };
+
+function battlePuzzle(seed) {
+  const rng = makeRng(seed);
+  for (;;) {
+    const d = dig(rng, BATTLE.clues), r = grade(d.puzzle);
+    if (r.solved && r.level <= 2) return d;
+  }
+}
+
+// The payload comes from a link, so nothing in it is trusted.
+function encodeMatch(o) {
+  const bytes = new TextEncoder().encode(JSON.stringify(o));
+  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function decodeMatch(token) {
+  let p;
+  try {
+    const bin = atob(String(token).replace(/-/g, '+').replace(/_/g, '/'));
+    p = JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, c => c.charCodeAt(0))));
+  } catch (e) { return null; }
+  const int = (x, lo, hi) => Number.isInteger(x) && x >= lo && x <= hi;
+  const pair = (x, lo, hi) => Array.isArray(x) && x.length === 2 && int(x[0], lo, hi) && int(x[1], lo, hi);
+  if (!p || p.v !== 1 || !int(p.s, 0, 4294967295) || !int(p.m, 1, 9999) || !int(p.r, 1, 99)) return null;
+  if (p.a != null && !int(p.a, -99999, 99999)) return null;
+  return {
+    v: 1, n: cleanName(p.n) || 'Friend', m: p.m, r: p.r, s: p.s,
+    a: p.a == null ? null : p.a,
+    c: Object.prototype.hasOwnProperty.call(CURSES, p.c) ? p.c : null,
+    t: pair(p.t, 0, 9) ? p.t : [0, 0],
+    p: pair(p.p, -99999, 99999) ? p.p : null,
+    e: !!p.e, f: !!p.f
+  };
+}
+const tokenFrom = text => {
+  const m = /(?:#b=)?([\w-]{8,})\s*$/.exec(String(text).trim());
+  return m ? m[1] : null;
+};
+
+function saveBattle() {
+  try { localStorage.setItem(BKEY, JSON.stringify({ B, given, solution, v, n })); } catch (e) {}
+}
+function enterBattle(token) {
+  const p = decodeMatch(token);
+  if (!p) return showLobby('That code is not valid.');
+  mode = 'battle';
+  document.body.classList.add('battle');
+  sel = active = hover = null; noteMode = false; undoStack = []; won = false; busy = true;
+  $('msg').classList.remove('show');
+  let s = null;
+  try { s = JSON.parse(localStorage.getItem(BKEY)); } catch (e) {}
+  if (s && s.B && s.B.token === token) {
+    B = s.B; given = s.given; solution = s.solution; v = s.v; n = s.n;
+  } else {
+    B = {
+      token, oppName: p.f ? null : p.n, m: p.m, r: p.r, s: p.s, a: p.a, c: p.c,
+      me: p.t[1], opp: p.t[0], prev: p.p ? [p.p[1], p.p[0]] : null,
+      phase: p.e ? 'final' : 'ready', score: 0, wrongs: 0, bonus: 0, solved: false,
+      startedAt: 0, lockUntil: 0, flash: -1, last: '', pick: undefined, over: false, nextSeed: 0
+    };
+    if (!p.e) {
+      const d = battlePuzzle(p.s);
+      given = d.puzzle.slice(); solution = d.solution; v = d.puzzle.slice(); n = Array(81).fill(0);
+      B.fogBox = boxMostGiven(); B.jinxDigit = digitMostNeeded();
+    }
+    saveBattle();
+  }
+  if (location.hash !== '#b=' + token) location.hash = 'b=' + token;
+  showPhase();
+}
+function boxMostGiven() {
+  let best = 0, most = -1;
+  for (let b = 0; b < 9; b++) {
+    const c = HOUSES[18 + b].filter(i => given[i]).length;
+    if (c > most) { most = c; best = b; }
+  }
+  return best;
+}
+function digitMostNeeded() {
+  let best = 1, most = -1;
+  for (let d = 1; d <= 9; d++) {
+    const c = IDX.filter(i => !given[i] && solution[i] === d).length;
+    if (c > most) { most = c; best = d; }
+  }
+  return best;
+}
+function startMatch(m = 1) {
+  enterBattle(encodeMatch({ v: 1, n: myName(), m, r: 1, s: randomSeed(), a: null, c: null, t: [0, 0], f: 1 }));
+}
+function startPlay() {
+  B.phase = 'play'; B.startedAt = Date.now(); busy = false;
+  hidePanel(); saveBattle(); render(); tick();
+}
+const elapsed = () => (Date.now() - B.startedAt) / 1000;
+const curseOn = c => mode === 'battle' && B && B.phase === 'play' && B.c === c && elapsed() < CURSES[c].secs;
+const curseLeft = () => Math.max(0, Math.ceil(CURSES[B.c].secs - elapsed()));
+const clock = s => Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+
+function battlePlace(i, d) {
+  const now = Date.now();
+  if (now < B.lockUntil) return;
+  if (curseOn('jinx') && d === B.jinxDigit) { B.last = d + ' is jinxed'; return; }
+  if (d !== solution[i]) {
+    B.score += BATTLE.wrong; B.wrongs++; B.lockUntil = now + BATTLE.lockMs; B.flash = i;
+    B.last = 'Wrong ' + BATTLE.wrong; active = d; saveBattle(); return;
+  }
+  v[i] = d; n[i] = 0;
+  for (const j of PEERS[i]) n[j] &= ~(1 << d);
+  let gain = BATTLE.right;
+  for (const h of HOUSES) if (h.includes(i) && h.every(j => v[j])) gain += BATTLE.house;
+  B.score += gain; B.last = '+' + gain; sel = null; active = d;
+  if (v.every((x, k) => x === solution[k])) return finishRound();
+  saveBattle();
+}
+function finishRound() {
+  if (B.phase !== 'play') return;
+  B.phase = 'done'; busy = true; sel = null; hover = null;
+  B.solved = v.every((x, k) => x === solution[k]);
+  if (B.solved) { B.bonus = Math.max(0, Math.ceil(BATTLE.limit - elapsed())); B.score += B.bonus; }
+  if (B.a !== null) {
+    if (B.score > B.a) B.me++; else if (B.score < B.a) B.opp++;
+    B.over = B.me >= BATTLE.winRounds || B.opp >= BATTLE.winRounds;
+    B.nextSeed = randomSeed();
+  }
+  saveBattle(); showPhase();
+}
+const needsCursePick = () => !B.over && !(B.r === 1 && B.a === null);
+function nextToken() {
+  const base = { v: 1, n: myName() || 'Friend', m: B.m, t: [B.me, B.opp] };
+  if (B.over) return encodeMatch({ ...base, r: B.r, s: 0, a: null, c: null, p: [B.score, B.a], e: 1 });
+  if (B.a === null) return encodeMatch({ ...base, r: B.r, s: B.s, a: B.score, c: B.pick || null });
+  return encodeMatch({ ...base, r: B.r + 1, s: B.nextSeed, a: null, c: B.pick || null, p: [B.score, B.a] });
+}
+
+// ---------- battle screens ----------
+const hidePanel = () => { $('panel').classList.remove('show'); };
+function showPanel(html) { $('panel').innerHTML = '<div class="card">' + html + '</div>'; $('panel').classList.add('show'); }
+const nameField = () => `<label>Your name <input id="name" maxlength="12" value="${esc(myName())}" autocomplete="off"></label>`;
+const rulesHtml = `<p class="dim">${clock(BATTLE.limit)} on the clock. Right number +${BATTLE.right}. Finished row, column or box +${BATTLE.house}. Wrong number ${BATTLE.wrong} and a ${BATTLE.lockMs / 1000}s lock. Solving it adds 1 point per second left.</p>`;
+const tallyHtml = () => `<p class="tally">You ${B.me} – ${B.opp} ${esc(B.oppName || 'Them')}</p>`;
+
+function showLobby(err) {
+  showPanel(`<h2>Battle</h2>${err ? `<p class="err">${esc(err)}</p>` : ''}
+    ${nameField()}
+    <button data-act="new" class="main">Start a match</button>
+    <label>Got a link or code from a friend? <input id="code" autocomplete="off"></label>
+    <button data-act="open">Open it</button>
+    <button data-act="close">${mode === 'battle' ? 'Back to solo' : 'Cancel'}</button>`);
+}
+function showPhase() {
+  if (B.phase === 'ready') {
+    const prev = B.prev ? `<p>Last round: you ${B.prev[0]}, ${esc(B.oppName)} ${B.prev[1]}.</p>` : '';
+    const goal = B.a === null ? '<p>You play first and set the score.</p>' : `<p>${esc(B.oppName)} scored <b>${B.a}</b>. Beat it.</p>`;
+    const curse = B.c ? `<p class="err"><b>${esc(B.oppName)} cursed you: ${CURSES[B.c].name}.</b> ${CURSES[B.c].text}</p>` : '';
+    showPanel(`<h2>Match ${B.m}, round ${B.r}</h2>${B.r > 1 ? tallyHtml() : ''}${prev}${goal}${curse}${rulesHtml}
+      ${myName() ? '' : nameField()}
+      <button data-act="start" class="main">Start the clock</button>
+      <button data-act="close">Back to solo</button>`);
+  } else if (B.phase === 'play') {
+    busy = false; hidePanel(); render(); tick();
+  } else if (B.phase === 'done') {
+    showDone();
+  } else showFinal();
+}
+function outcomeLine() {
+  const line = `You scored <b>${B.score}</b>${B.solved ? ` (solved, +${B.bonus} time bonus)` : ''}, with ${B.wrongs} wrong.`;
+  if (B.a === null) return `<p>${line}</p>`;
+  const res = B.score > B.a ? 'You win the round' : B.score < B.a ? 'You lose the round' : 'Round tied';
+  return `<p>${line}</p><p><b>${res}</b>: ${B.score} vs ${esc(B.oppName)}'s ${B.a}.</p>${tallyHtml()}`;
+}
+function sendHtml() {
+  const token = nextToken();
+  const url = location.href.split('#')[0] + '#b=' + token;
+  const local = location.protocol === 'file:';
+  return `<label>${local ? 'Send this to your friend. They need sudoku.html too, and paste this under Battle.' : 'Send this link to your friend.'}
+    <textarea id="out" readonly rows="3">${esc(url)}</textarea></label>
+    <button data-act="copy" class="main" id="copy">Copy</button>`;
+}
+function showDone() {
+  if (B.over) {
+    const title = B.me > B.opp ? 'You won the match!' : 'You lost the match.';
+    return showPanel(`<h2>${title}</h2>${outcomeLine()}${sendHtml()}
+      <button data-act="rematch">Rematch</button><button data-act="close">Back to solo</button>`);
+  }
+  if (needsCursePick() && B.pick === undefined) {
+    const btns = Object.keys(CURSES).map(k => `<button data-act="curse" data-curse="${k}"><b>${CURSES[k].name}</b><br><small>${CURSES[k].text}</small></button>`).join('');
+    return showPanel(`<h2>Round over</h2>${outcomeLine()}<p>Pick a curse for ${esc(B.oppName || 'your friend')}:</p>${btns}
+      <button data-act="curse" data-curse="">No curse</button>`);
+  }
+  showPanel(`<h2>Round over</h2>${outcomeLine()}${sendHtml()}<button data-act="close">Back to solo</button>`);
+}
+function showFinal() {
+  const title = B.me > B.opp ? 'You won the match!' : 'You lost the match.';
+  const prev = B.prev ? `<p>Last round: you ${B.prev[0]}, ${esc(B.oppName)} ${B.prev[1]}.</p>` : '';
+  showPanel(`<h2>${title}</h2>${tallyHtml()}${prev}<button data-act="rematch" class="main">Rematch</button><button data-act="close">Back to solo</button>`);
+}
+function leaveBattle() { location.hash = ''; location.reload(); }
+
+$('panel').addEventListener('click', e => {
+  const t = e.target.closest('[data-act]');
+  if (!t) return;
+  const nameInput = $('name');
+  if (nameInput) setName(nameInput.value);
+  const act = t.dataset.act;
+  if (act === 'new') startMatch();
+  else if (act === 'open') {
+    const token = tokenFrom($('code').value);
+    if (token && decodeMatch(token)) enterBattle(token); else showLobby('That code is not valid.');
+  }
+  else if (act === 'start') startPlay();
+  else if (act === 'rematch') startMatch(B.m + 1);
+  else if (act === 'curse') { B.pick = t.dataset.curse || null; saveBattle(); showDone(); }
+  else if (act === 'close') { if (mode === 'battle') leaveBattle(); else hidePanel(); }
+  else if (act === 'copy') {
+    const out = $('out');
+    out.select();
+    const copied = () => { $('copy').textContent = 'Copied'; };
+    const fallback = () => { try { if (document.execCommand('copy')) copied(); } catch (err) {} };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(out.value).then(copied, fallback);
+    else fallback();
+  }
+});
+$('battle').onclick = () => showLobby();
+$('leave').onclick = () => { if (B.phase !== 'play' || confirm('Leave this round? Your clock keeps running.')) leaveBattle(); };
+
+function tick() {
+  if (mode !== 'battle' || !B || B.phase !== 'play') return;
+  const left = Math.ceil(BATTLE.limit - elapsed());
+  if (left <= 0) return finishRound();
+  const curse = B.c && curseOn(B.c) ? ` · ${CURSES[B.c].name} ${curseLeft()}s` : '';
+  const target = B.a === null ? '' : ` / ${B.a}`;
+  $('hud-score').textContent = B.score + target;
+  $('hud-last').textContent = (Date.now() < B.lockUntil ? 'Locked' : B.last) + curse;
+  $('hud-clock').textContent = clock(left);
+  const key = [B.c && curseOn(B.c), Date.now() < B.lockUntil].join();
+  if (key !== tickKey) { tickKey = key; render(); }
+}
+setInterval(tick, 250);
+
+// ---------- boot ----------
+// The URL hash is the seed: same link, same puzzle.
+const hashSeed = () => { const m = /^#(\d{1,10})$/.exec(location.hash); return m ? +m[1] >>> 0 : null; };
+addEventListener('hashchange', () => {
+  const b = /^#b=([\w-]+)$/.exec(location.hash);
+  if (b) { if (!B || B.token !== b[1]) enterBattle(b[1]); return; }
+  const h = hashSeed(); if (h !== null && h !== curSeed && !busy) newGame(h); });
+(function boot() {
+  const b = /^#b=([\w-]+)$/.exec(location.hash);
+  if (b) return enterBattle(b[1]);
+  const h = hashSeed();
+  let s = null;
+  try { s = JSON.parse(localStorage.getItem(KEY)); } catch (e) {}
+  if (s && s.v && s.v.length === 81 && (h === null || h === s.seed)) {
+    if (s.v.every((x, i) => x === s.solution[i])) return newGame();
+    given = s.given; solution = s.solution; v = s.v; n = s.n; curSeed = s.seed;
+    location.hash = curSeed;
+    return render();
+  }
+  newGame(h === null ? undefined : h);
+})();
+</script>
+</body>
+</html>
