@@ -35,9 +35,9 @@ export class Board {
     }
   }
 
-  // free = solo rules: any digit goes in, conflicts show red, undo works.
-  load(puzzle, board, { free = false, notes = null } = {}) {
-    this.given = puzzle.slice(); this.v = board.slice(); this.n = notes ? notes.slice() : Array(81).fill(0);
+  // free = solo rules: any digit goes in, wrong digits show red right away, undo works.
+  load(puzzle, board, { free = false, notes = null, solution = null } = {}) {
+    this.given = puzzle.slice(); this.solution = solution; this.v = board.slice(); this.n = notes ? notes.slice() : Array(81).fill(0);
     this.sel = this.active = this.hover = null; this.noteMode = false; this.free = free;
     this.undoStack = []; this.pending.clear(); this.flash = -1;
     this.render();
@@ -132,7 +132,8 @@ export class Board {
 
   render() {
     const { v, n, given } = this, show = this.hover || this.active;
-    const bad = this.free ? IDX.map(i => v[i] && !given[i] ? PEERS[i].some(j => v[j] === v[i]) : false) : null;
+    const sol = this.solution;
+    const bad = this.free ? IDX.map(i => v[i] && !given[i] ? (sol ? v[i] !== sol[i] : PEERS[i].some(j => v[j] === v[i])) : false) : null;
     for (const i of IDX) {
       const e = this.cells[i], x = v[i], pend = this.pending.get(i);
       let cl = 'c';

@@ -481,7 +481,7 @@ function newSolo() {
     const p = e.data;
     S.solo = { seed: p.seed, difficulty: p.difficulty, puzzle: p.puzzle, solution: p.solution, elapsed: 0 };
     S.soloStart = Date.now();
-    board.load(p.puzzle, p.puzzle, { free: true }); board.locked = false; board.render();
+    board.load(p.puzzle, p.puzzle, { free: true, solution: p.solution }); board.locked = false; board.render();
     overlay(''); saveSolo();
   };
   worker.postMessage({ seed: crypto.getRandomValues(new Uint32Array(1))[0], difficulty: S.prefs.soloDiff });
@@ -491,7 +491,7 @@ function continueSolo() {
   if (!s) return newSolo();
   enterGame('solo');
   S.solo = s; S.soloStart = Date.now() - s.elapsed;
-  board.load(s.puzzle, s.v, { free: true, notes: s.n }); board.locked = false; board.render();
+  board.load(s.puzzle, s.v, { free: true, notes: s.n, solution: s.solution }); board.locked = false; board.render();
 }
 function saveSolo() {
   if (S.mode !== 'solo' || !S.solo) return;
