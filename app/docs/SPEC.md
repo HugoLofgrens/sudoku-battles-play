@@ -128,7 +128,7 @@ The server keeps 4 ready puzzles per tier, made on a worker thread.
 
 ## Customization
 
-- **Free now:** avatar (12 symbols × 8 colors) and board theme (Night, Paper, Ocean, Forest).
+- **Free now:** avatar (12 symbols × 8 colors) and board theme (Night, Paper, Slate, Ocean). Pressing a cell shades its row, column and box gray, fading with distance; the pressed cell is dark blue, matching numbers blue.
   Saved on the account, or on the device for guests.
 - **Paid later:** extra customization in a shop. Not built.
 

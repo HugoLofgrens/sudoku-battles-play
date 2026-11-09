@@ -89,7 +89,7 @@ const on = {
 // ---------- look ----------
 function applyTheme() {
   const t = THEMES[S.look.theme], r = document.documentElement.style;
-  const map = { bg: 'bg', cell: 'cell', line: 'line', thick: 'thick', given: 'given', user: 'user', note: 'note', hi: 'hi', hiInk: 'hi-ink', peer: 'peer', dead: 'dead', panel: 'panel' };
+  const map = { bg: 'bg', cell: 'cell', line: 'line', thick: 'thick', given: 'given', user: 'user', note: 'note', hi: 'hi', hiInk: 'hi-ink', peer: 'peer', dead: 'dead', panel: 'panel', sel: 'sel', opp: 'opp' };
   for (const [k, v] of Object.entries(map)) r.setProperty('--' + v, t[k]);
   document.querySelector('meta[name=theme-color]').content = t.bg;
 }

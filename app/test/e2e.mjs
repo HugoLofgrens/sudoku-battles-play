@@ -26,7 +26,8 @@ async function page(name) {
 }
 const check = (cond, msg) => { if (!cond) throw new Error('FAILED: ' + msg); console.log('ok -', msg); };
 const boardOf = p => p.$$eval('#board .c', cs => cs.map(c => (c.querySelector('.n') ? 0 : +c.textContent || 0)));
-async function waitLive(p) { await p.waitForSelector('#s-game:not([hidden])'); await p.waitForFunction(() => !document.querySelector('#overlay').classList.contains('show'), null, { timeout: 8000 }); }
+// Live = the countdown is over and the board takes input (it starts locked).
+async function waitLive(p) { await p.waitForSelector('#s-game:not([hidden])'); await p.waitForFunction(() => !document.querySelector('#board').classList.contains('locked') && !document.querySelector('#overlay').classList.contains('show'), null, { timeout: 8000 }); }
 async function fill(p, solution, cells, pause = 80) {
   for (const i of cells) {
     await p.click(`#board .c:nth-child(${i + 1})`);

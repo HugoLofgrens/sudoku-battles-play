@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#14161b">
+<meta name="theme-color" content="#121418">
 <title>Sudoku Battles</title>
 <style>
-:root{--bg:#14161b;--cell:#22262f;--line:#3a404d;--thick:#a2aaba;--given:#eef0f5;--user:#7cc4ff;--note:#8b93a3;--hi:#f2b632;--hi-ink:#17130a;--peer:#2a2f3a;--dead:#15171c;--panel:#1b1e25;--bad:#ff5d5d;--good:#6bd68a;--s:min(94vw,calc(100dvh - 290px),560px)}
+:root{--bg:#121418;--cell:#1e2128;--line:#323741;--thick:#8b919d;--given:#eceef2;--user:#8ab4ff;--note:#8a909b;--hi:#3b82f6;--hi-ink:#fff;--sel:#1e40af;--peer:#4a505b;--dead:#16181d;--panel:#191c22;--opp:#a3aab6;--bad:#ff5d5d;--good:#6bd68a;--s:min(94vw,calc(100dvh - 290px),560px)}
 *{box-sizing:border-box}
 html,body{margin:0;height:100%}
 body{background:var(--bg);color:var(--given);font:16px system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-tap-highlight-color:transparent;display:flex;flex-direction:column}
@@ -70,14 +70,15 @@ body.solo #bars{display:none}
 .pbar .top .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pbar .top .rt{color:var(--note);font-weight:500;font-size:13px}
 .pbar .prog{grid-column:2/4;height:8px;background:var(--cell);border-radius:4px;overflow:hidden}
-.pbar .prog i{display:block;height:100%;width:0;background:var(--user);transition:width .25s}
-.pbar.opp .prog i{background:var(--hi)}
+.pbar .prog i{display:block;height:100%;width:0;transition:width .25s}
+.pbar .prog i{background:var(--hi)}
+.pbar.opp .prog i{background:var(--opp)}
 .pbar .side{font-size:13px;color:var(--note);font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
 .mis{letter-spacing:1px}
 .mis .x{color:var(--bad)}
 #clock-row{width:var(--s);display:flex;justify-content:space-between;align-items:baseline;gap:8px}
 #clock{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums}
-#status-line{font-size:14px;color:var(--hi);text-align:right}
+#status-line{font-size:14px;color:var(--note);text-align:right}
 #wrap{position:relative;width:var(--s)}
 #board{width:100%;aspect-ratio:1;display:grid;grid-template-columns:repeat(9,1fr);grid-template-rows:repeat(9,1fr);border:3px solid var(--thick);border-radius:4px;overflow:hidden;user-select:none}
 .c{position:relative;display:flex;align-items:center;justify-content:center;background:var(--cell);border:solid var(--line);border-width:0 1px 1px 0;font-size:calc(var(--s)*.058);cursor:pointer;min-width:0;min-height:0}
@@ -87,12 +88,16 @@ body.solo #bars{display:none}
 .c.user{color:var(--user);font-weight:500}
 .c.pend{color:var(--note)}
 .c.peer{background:var(--peer)}
+.c.peer.k2{background:color-mix(in srgb,var(--peer) 78%,var(--cell))}
+.c.peer.k3{background:color-mix(in srgb,var(--peer) 58%,var(--cell))}
+.c.peer.k4{background:color-mix(in srgb,var(--peer) 40%,var(--cell))}
 .c.dead{background:var(--dead)}
-.c.cand{background:color-mix(in srgb,var(--hi) 22%,var(--cell))}
+.c.cand{background:color-mix(in srgb,var(--hi) 16%,var(--cell))}
 .c.same{background:var(--hi);color:var(--hi-ink)}
 .c.bad{color:var(--bad)}
 .c.same.bad{background:var(--bad);color:#200}
-.c.sel{box-shadow:inset 0 0 0 3px var(--given)}
+.c.sel{background:var(--sel);color:#fff}
+.c.sel .n{color:#dbe6ff}
 .c.miss{background:var(--bad)!important;color:#200}
 #board.locked .c{cursor:default}
 .n{position:absolute;inset:1px;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);font-size:calc(var(--s)*.021);color:var(--note);font-weight:500}
@@ -110,7 +115,7 @@ body.solo #bars{display:none}
 #pad.notes button{border-style:dashed}
 #tools{width:var(--s);display:flex;gap:6px}
 #tools button{flex:1;padding:9px 0;font-size:15px}
-#tools button.on{background:var(--user);color:#06121d;border-color:var(--user)}
+#tools button.on{background:var(--hi);color:var(--hi-ink);border-color:var(--hi)}
 
 /* sheet + toast */
 #sheet{position:fixed;inset:0;z-index:10;display:none;align-items:flex-end;justify-content:center;background:#0008;padding:16px}

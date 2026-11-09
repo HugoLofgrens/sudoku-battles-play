@@ -2,6 +2,9 @@
 // or pick a number first and tap cells. In a race the board only shows what the server confirmed.
 import { IDX, PEERS, rowOf, colOf } from '/shared/sudoku.js';
 
+// 1 = next to the pressed cell ... 4 = far end of its row or column.
+const fade = (a, b) => { const d = Math.max(Math.abs(rowOf(a) - rowOf(b)), Math.abs(colOf(a) - colOf(b))); return d <= 1 ? 1 : d === 2 ? 2 : d <= 4 ? 3 : 4; };
+
 export class Board {
   constructor(boardEl, padEl, { onPlace, onChange = () => {} }) {
     this.el = boardEl; this.padEl = padEl;
@@ -138,11 +141,11 @@ export class Board {
       if (i === this.flash) cl += ' miss';
       if (given[i]) cl += ' given'; else if (x) cl += ' user'; else if (pend) cl += ' pend';
       if (bad && bad[i]) cl += ' bad';
-      if (show) {
-        if (x === show) cl += ' same';
-        else if (x) cl += ' dead';
-        else cl += blocked[i] ? ' dead' : ' cand';
-      } else if (this.sel !== null && PEERS[this.sel].includes(i)) cl += ' peer';
+      // A pressed cell: its row, column and box go gray, strongest next to it.
+      // A number picked on the pad with no cell pressed: tint where it can still go.
+      if (show && x === show) cl += ' same';
+      else if (this.sel !== null) { if (PEERS[this.sel].includes(i)) cl += ' peer k' + fade(this.sel, i); }
+      else if (show) cl += x || blocked[i] ? ' dead' : ' cand';
       if (i === this.sel) cl += ' sel';
       e.className = cl;
       if (x || pend) e.textContent = x || pend;
