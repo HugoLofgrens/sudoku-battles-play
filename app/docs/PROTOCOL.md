@@ -21,7 +21,7 @@ with a 4xx/5xx status.
 | POST | `/api/friends/accept` 🔒 | `{name}` | `{status}` |
 | POST | `/api/friends/remove` 🔒 | `{name}` | `{}` (also declines and cancels requests) |
 
-`me` = `{id, name, avatar, theme, guest:false, ratings:{easy|medium|hard:{rating, rd, provisional, games, wins, losses, draws, peak}}}`
+`me` = `{id, name, avatar, theme, guest:false, ratings:{medium|hard|extreme:{rating, rd, provisional, games, wins, losses, draws, peak}}}`
 
 ## WebSocket `/ws`
 
