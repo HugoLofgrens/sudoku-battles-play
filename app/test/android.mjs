@@ -42,8 +42,10 @@ try {
     if (m.t === 'welcome') bot.send(JSON.stringify({ t: 'room.join', code }));
     if (m.t === 'game' && !botGame && m.status === 'live') botGame = m;
   });
-  await page.waitForFunction(() => !document.querySelector('#board').classList.contains('locked'), null, { timeout: 30000 });
-  check(true, 'race started on the phone');
+  await page.waitForSelector('#s-game:not([hidden])', { timeout: 30000 });
+  await page.waitForFunction(() => !document.querySelector('#board').classList.contains('locked') && !document.querySelector('#overlay').classList.contains('show'), null, { timeout: 30000 });
+  for (let t = 0; !botGame && t < 100; t++) await sleep(100);
+  check(!!botGame, 'race started on the phone, opponent joined');
   const sol = solve(botGame.puzzle, 1).first;
   const empties = botGame.puzzle.map((x, i) => (x ? -1 : i)).filter(i => i >= 0);
   let k = 0;

@@ -12,6 +12,7 @@ export class Board {
     this.given = Array(81).fill(0); this.v = Array(81).fill(0); this.n = Array(81).fill(0);
     this.sel = null; this.active = null; this.hover = null; this.noteMode = false;
     this.locked = true; this.free = false; this.flash = -1; this.pending = new Map();
+    boardEl.classList.add('locked');
     this.undoStack = [];
     this.cells = IDX.map(i => {
       const e = document.createElement('div');
