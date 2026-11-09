@@ -37,8 +37,10 @@ try {
   // The opponent: a plain WebSocket client that fills one right cell every 1.5 s.
   const bot = new WebSocket('ws://127.0.0.1:8080/ws');
   let botGame = null;
+  bot.on('open', () => bot.send(JSON.stringify({ t: 'hello' })));
   bot.on('message', raw => {
     const m = JSON.parse(raw);
+    if (m.t === 'error') console.error('opponent error:', m.message);
     if (m.t === 'welcome') bot.send(JSON.stringify({ t: 'room.join', code }));
     if (m.t === 'game' && !botGame && m.status === 'live') botGame = m;
   });
