@@ -75,3 +75,51 @@ jobs:
       - run: npx cap sync ios
       - name: Build for the iOS simulator (unsigned)
         run: xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build | tail -n 40
+
+  # Boots a real Android emulator, installs the app and plays a live race against a scripted
+  # opponent, with the server running next to it. Screenshots are uploaded.
+  android-emulator:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 21 }
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Start the server
+        working-directory: app
+        run: |
+          npm ci
+          npm i --no-save playwright@1.63.0
+          nohup node --no-warnings server/main.js > server.log 2>&1 &
+          sleep 2 && curl -sf http://127.0.0.1:8080/ > /dev/null
+      - name: Build the APK for the emulator (server = the host)
+        working-directory: app/mobile
+        run: |
+          npm ci
+          SERVER_URL=http://10.0.2.2:8080 npm run build
+          npx cap sync android
+          cd android && ./gradlew assembleDebug --no-daemon
+      - name: Play a race on the emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
+          script: cd app && node test/android.mjs mobile/android/app/build/outputs/apk/debug/app-debug.apk android-shots
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-emulator-screens
+          path: |
+            app/android-shots
+            app/server.log
