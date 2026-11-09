@@ -1,7 +1,7 @@
 // HTTP API + WebSocket hub. docs/PROTOCOL.md lists every endpoint and message.
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
-import { join, normalize, extname, dirname } from 'node:path';
+import { join, normalize, extname, dirname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes, randomInt } from 'node:crypto';
 import { WebSocketServer } from 'ws';
@@ -397,7 +397,7 @@ export async function createApp({ dbFile = join(ROOT, 'data', 'sudoku.db'), port
   async function serveStatic(req, res, path) {
     if (path === '/' || path === '/index.html') path = '/client/index.html';
     const file = normalize(join(ROOT, path));
-    const ok = ['client', 'shared'].some(d => file.startsWith(join(ROOT, d) + '/'));
+    const ok = ['client', 'shared'].some(d => file.startsWith(join(ROOT, d) + sep));
     if (!ok) { res.writeHead(404); return res.end('Not found'); }
     try {
       const data = await readFile(file);
