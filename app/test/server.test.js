@@ -58,7 +58,8 @@ test('register, login, bad login, duplicate names', async () => {
   const r = await api('/api/register', { method: 'POST', body: { name: 'alice', password: 'password1' } });
   assert.equal(r.status, 201);
   assert.ok(r.data.token);
-  assert.equal(r.data.me.ratings.medium.rating, 1500);
+  assert.equal(r.data.me.ratings.medium.rating, 500);
+  assert.equal(r.data.me.ratings.medium.tier, 'Placement');
   assert.equal(r.data.me.ratings.medium.provisional, true);
   assert.equal((await api('/api/register', { method: 'POST', body: { name: 'ALICE', password: 'password1' } })).status, 409);
   assert.equal((await api('/api/register', { method: 'POST', body: { name: 'GuestBob', password: 'password1' } })).status, 400);
@@ -120,13 +121,24 @@ test('a full ranked race: first to solve wins, ratings move once, stats record i
   const pa = (await api('/api/profile/racer_a')).data;
   assert.equal(pa.ratings.medium.games, 1);
   assert.equal(pa.ratings.medium.wins, 1);
-  assert.ok(pa.ratings.medium.rating > 1500);
+  assert.ok(pa.ratings.medium.rating > 500);
   assert.equal(pa.recent[0].result, 'win');
   assert.ok(pa.bestTimes.medium > 0);
   assert.equal(pa.streak, 1);
   const pb = (await api('/api/profile/racer_b')).data;
   assert.equal(pb.ratings.medium.losses, 1);
-  assert.equal(pa.ratings.medium.rating - 1500, 1500 - pb.ratings.medium.rating);
+  assert.ok(pb.ratings.medium.rating < 500);
+  // B made a mistake and gave up after A finished: A won by solving, margin = what B had left.
+  assert.ok(endA.ratingChange.margin > 90, 'B had almost everything left: ' + endA.ratingChange.margin);
+  assert.ok(endA.timeline.you.length >= endA.toFill && endA.timeline.opp.some(m => m[1] === 0), 'replay timeline sent');
+  assert.equal(pa.times.medium.count, 1);
+  assert.equal(pa.times.medium.median, pa.bestTimes.medium);
+  assert.equal(pa.history.medium.length, 1);
+  assert.equal(pa.history.medium[0][1], pa.ratings.medium.rating);
+  const fastest = (await api('/api/times/medium?kind=fastest')).data;
+  assert.equal(fastest[0].name, 'racer_a');
+  assert.equal((await api('/api/times/medium?kind=fastest&period=week')).data[0].name, 'racer_a');
+  assert.equal((await api('/api/times/medium?kind=median')).data.length, 0, 'median board needs 10 solves');
   assert.equal(pa.ratings.hard.games, 0, 'other difficulties untouched');
   ca.close(); cb.close();
 });
@@ -199,6 +211,37 @@ test('sign-up is rate limited per address', async () => {
   for (let k = 0; k < 6; k++) codes.push((await fetch(url, { method: 'POST', body: JSON.stringify({ name: 'rl' + k, password: 'password1' }) })).status);
   await small.close();
   assert.deepEqual(codes, [201, 201, 201, 201, 201, 429]);
+});
+
+test('daily puzzle: one server-timed attempt per account, on the board when solved', async () => {
+  const u = (await api('/api/register', { method: 'POST', body: { name: 'daily_d', password: 'password1' } })).data;
+  const c = await client({ token: u.token });
+  c.send({ t: 'daily.start' });
+  const v = await c.wait(m => m.t === 'daily');
+  assert.ok(!('solution' in v));
+  assert.ok(['medium', 'hard', 'extreme'].includes(v.difficulty));
+  const sol = solve(v.puzzle, 1).first;
+  const empties = v.board.map((x, i) => (x ? -1 : i)).filter(i => i >= 0);
+  c.send({ t: 'daily.place', cell: empties[0], digit: sol[empties[0]] % 9 + 1 });
+  assert.equal((await c.wait(m => m.t === 'daily.placed')).ok, false);
+  for (let k = 0; k < empties.length; k++) {
+    c.send({ t: 'daily.place', cell: empties[k], digit: sol[empties[k]] });
+    if (k % 10 === 9) await sleep(1000);
+  }
+  const done = await c.wait(m => m.t === 'daily' && m.status === 'solved', 15000);
+  assert.ok(done.time > 0);
+  assert.equal(done.mistakes, 1);
+  const info = (await api('/api/daily', { token: u.token })).data;
+  assert.equal(info.board[0].name, 'daily_d');
+  assert.equal(info.you.rank, 1);
+  c.send({ t: 'daily.start' });
+  assert.equal((await c.wait(m => m.t === 'daily.done')).status, 'solved', 'one attempt per day');
+  c.close();
+  // The same puzzle for a guest, who is not on the board.
+  const g = await client({});
+  g.send({ t: 'daily.start' });
+  assert.deepEqual((await g.wait(m => m.t === 'daily')).puzzle, v.puzzle);
+  g.close();
 });
 
 test('static files and path traversal', async () => {

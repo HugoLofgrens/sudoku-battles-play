@@ -9,6 +9,10 @@ import { openDb } from './db.js';
 import { Match, RULES } from './match.js';
 import { PuzzlePool } from './puzzles.js';
 import { PROVISIONAL_RD } from './glicko2.js';
+import { shown, margin } from './rating.js';
+import { timeStats, timeBoard } from './stats.js';
+import { DailyRun, dayKey, dayNumber, difficultyOf } from './daily.js';
+import { tierOf } from '../shared/tiers.js';
 import { checkName, checkPassword, hashPassword, verifyPassword, DUMMY_HASH, newToken, hashToken, Limiter } from './auth.js';
 import { cleanAvatar, cleanTheme } from '../shared/looks.js';
 import { DIFFICULTIES, GENERATOR_VERSION } from '../shared/sudoku.js';
@@ -17,6 +21,10 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json', '.webmanifest': 'application/manifest+json' };
 const ROOM_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const ROOM_TTL = 15 * 60e3, KEEP_FINISHED = 10 * 60e3;
+// Ranked anti-farming: the same two accounts are not paired again within this window unless one
+// of them has waited REPAIR_AFTER in the queue (so two lone players can still play).
+const DAILY_KEEP = 2 * 3600e3;
+const REPAIR_COOLDOWN = 10 * 60e3, REPAIR_AFTER = 30e3;
 
 export const matchWindow = waitMs => (waitMs >= 60e3 ? Infinity : 150 + 50 * Math.floor(waitMs / 5e3));
 
@@ -25,6 +33,10 @@ class Reply { constructor(status, payload) { this.status = status; this.payload 
 
 export async function createApp({ dbFile = join(ROOT, 'data', 'sudoku.db'), port = 8080, host = '0.0.0.0', log = console.log, now = Date.now, limitScale = 1 } = {}) {
   const store = openDb(dbFile);
+  const recovered = store.recover(now());
+  if (recovered) log(`${recovered} unfinished game(s) from the last run were aborted (no rating change).`);
+  const dailyRuns = new Map();        // player key -> DailyRun (today's attempt in progress)
+  const lastPaired = new Map();       // "a|b" user ids -> time of their last ranked pairing
   const pool = new PuzzlePool();
   const clients = new Map();          // key -> {ws, ident}
   const guests = new Map();           // guest token -> ident
@@ -37,7 +49,12 @@ export async function createApp({ dbFile = join(ROOT, 'data', 'sudoku.db'), port
   // ---------- identities ----------
   const lookOf = u => { try { return cleanAvatar(JSON.parse(u.avatar)); } catch { return cleanAvatar(null); } };
   const keyOfUser = id => 'u:' + id;
-  function ratingView(r) { return { rating: Math.round(r.rating), rd: Math.round(r.rd), provisional: r.rd > PROVISIONAL_RD, games: r.games, wins: r.wins, losses: r.losses, draws: r.draws, peak: Math.round(r.peak) }; }
+  // What clients see of a rating: the 500..10,000 curve (rating.js) and a tier. The Glicko
+  // numbers stay on the server.
+  function ratingView(r) {
+    const provisional = r.rd > PROVISIONAL_RD, rating = shown(r.rating);
+    return { rating, provisional, tier: tierOf(rating, provisional).name, games: r.games, wins: r.wins, losses: r.losses, draws: r.draws, peak: shown(r.peak) };
+  }
   function meView(u) {
     const rs = store.ratings(u.id, now());
     return { id: u.id, name: u.name, avatar: lookOf(u), theme: u.theme, guest: false,
@@ -45,7 +62,7 @@ export async function createApp({ dbFile = join(ROOT, 'data', 'sudoku.db'), port
   }
   function userFromToken(token) {
     if (typeof token !== 'string' || token.length > 100) return null;
-    const h = hashToken(token), s = store.session(h);
+    const h = hashToken(token), s = store.session(h, now());
     if (!s) return null;
     store.touchSession(h, now());
     return store.userById(s.user_id);
@@ -92,8 +109,12 @@ export async function createApp({ dbFile = join(ROOT, 'data', 'sudoku.db'), port
   function onDecided(m) {
     if (m.kind === 'ranked' && m.result.winner !== undefined) {
       const users = m.p.map(p => p.info.userId);
-      const r = store.rateGame(m.id, m.difficulty, users, m.result.winner, m.result.at);
-      if (r) m.ratingChange = r.map(x => ({ before: Math.round(x.before.rating), after: Math.round(x.after.rating), delta: Math.round(x.after.rating) - Math.round(x.before.rating), provisional: x.after.rd > PROVISIONAL_RD }));
+      const d = margin(m.result, m.p.map(p => p.filled), m.toFill);
+      const r = store.rateGame(m.id, m.difficulty, users, m.result.winner, m.result.at, d);
+      if (r) m.ratingChange = r.map(x => {
+        const before = shown(x.before.rating), after = shown(x.after.rating), provisional = x.after.rd > PROVISIONAL_RD;
+        return { before, after, delta: after - before, provisional, tier: tierOf(after, provisional).name, margin: Math.round(d * 100), gain: Math.round(x.gain * 100) / 100 };
+      });
     }
     store.saveGame(m);
   }
@@ -142,11 +163,15 @@ export async function createApp({ dbFile = join(ROOT, 'data', 'sudoku.db'), port
         for (let j = i + 1; j < list.length; j++) {
           const b = list[j];
           if (taken.has(b.key) || b.userId === a.userId) continue;
+          const pairKey = a.userId < b.userId ? a.userId + '|' + b.userId : b.userId + '|' + a.userId;
+          if (t - (lastPaired.get(pairKey) || -Infinity) < REPAIR_COOLDOWN && Math.max(t - a.since, t - b.since) < REPAIR_AFTER) continue;
           const gap = Math.abs(a.rating - b.rating);
           if (gap <= Math.max(matchWindow(t - a.since), matchWindow(t - b.since)) && gap < bestGap) { best = b; bestGap = gap; }
         }
         if (!best) continue;
         taken.add(a.key); taken.add(best.key);
+        lastPaired.set(a.userId < best.userId ? a.userId + '|' + best.userId : best.userId + '|' + a.userId, t);
+        if (lastPaired.size > 5000) for (const [k, v] of lastPaired) if (t - v > REPAIR_COOLDOWN) lastPaired.delete(k);
         queues[d].delete(a.key); queues[d].delete(best.key);
         const ia = clients.get(a.key)?.ident, ib = clients.get(best.key)?.ident;
         if (!ia || !ib) continue;
@@ -242,9 +267,49 @@ export async function createApp({ dbFile = join(ROOT, 'data', 'sudoku.db'), port
         startMatch('casual', m.difficulty, m.mistakes, ids).catch(e => log('match failed', e));
       } else m.sync(now());
     },
+    // ---- daily puzzle ----
+    'daily.start'(c) {
+      const { ident } = c, t = now(), day = dayKey(t);
+      let run = dailyRuns.get(ident.key);
+      if (run && run.day !== day) { dailyRuns.delete(ident.key); run = null; }
+      if (run && run.status !== 'playing') return send(ident.key, { t: 'daily.done', day, status: run.status, time: run.time, mistakes: run.mistakes });
+      if (!run) {
+        if (ident.userId) {
+          const prev = store.dailyRun(day, ident.userId);
+          if (prev) return send(ident.key, { t: 'daily.done', day, status: prev.status, time: prev.time, mistakes: prev.mistakes });
+          if (!store.startDaily(day, ident.userId, t)) return fail(ident.key, 'daily-taken', 'You already played today.');
+        }
+        run = new DailyRun(day, t);
+        run.userId = ident.userId;
+        dailyRuns.set(ident.key, run);
+      }
+      send(ident.key, run.view(t));
+    },
+    'daily.place'(c, msg) {
+      const run = dailyRuns.get(c.ident.key);
+      if (!run) return fail(c.ident.key, 'no-daily', 'Start the daily puzzle first.');
+      const t = now(), r = run.place(msg.cell, msg.digit, t);
+      send(c.ident.key, { t: 'daily.placed', cell: msg.cell, digit: msg.digit, ok: r.ok ?? null, reason: r.reason ?? null });
+      endDailyIfDone(c.ident, run, t);
+      send(c.ident.key, run.view(t));
+    },
+    'daily.giveup'(c) {
+      const run = dailyRuns.get(c.ident.key);
+      if (!run) return;
+      run.giveUp(); endDailyIfDone(c.ident, run, now()); send(c.ident.key, run.view(now()));
+    },
     leave(c) { const m = gameOf(c.ident.key); if (m && m.status !== 'live') freeUp(c.ident.key); },
     ping(c) { send(c.ident.key, { t: 'pong', serverNow: now() }); }
   };
+
+  function endDailyIfDone(ident, run, t) {
+    if (run.status === 'playing' || run.saved) return;
+    run.saved = true;
+    if (ident.userId) {
+      store.endDaily(run.day, ident.userId, run.status, run.time, run.mistakes, t);
+      if (run.status === 'solved') store.addSolve(ident.userId, run.difficulty, run.time, t, 'daily', run.day);
+    }
+  }
 
   function onHello(ws, msg) {
     let ident, guestToken = null, me;
@@ -313,7 +378,10 @@ export async function createApp({ dbFile = join(ROOT, 'data', 'sudoku.db'), port
     for (const g of [...games].reverse()) { run = g.result === 'win' ? run + 1 : 0; bestStreak = Math.max(bestStreak, run); }
     for (const g of games) { if (g.result !== 'win') break; streak++; }
     const me = meView(u);
+    const history = {};
+    for (const h of store.history(u.id)) (history[h.difficulty] ||= []).push([h.at, shown(h.rating)]);
     return { name: u.name, avatar: me.avatar, joined: u.created, ratings: me.ratings, bestTimes: best, streak, bestStreak,
+      times: timeStats(store, u.id), history,
       totals: { games: games.length, wins: games.filter(g => g.result === 'win').length, losses: games.filter(g => g.result === 'loss').length, draws: games.filter(g => g.result === 'draw').length },
       recent: games.slice(0, 20) };
   }
@@ -358,7 +426,25 @@ export async function createApp({ dbFile = join(ROOT, 'data', 'sudoku.db'), port
     },
     'GET /api/leaderboard': async (req, arg) => {
       if (!DIFFICULTIES.includes(arg)) throw new HttpError(404, 'Unknown difficulty.');
-      return store.leaders(arg, PROVISIONAL_RD, 50).map(r => ({ name: r.name, avatar: (() => { try { return cleanAvatar(JSON.parse(r.avatar)); } catch { return cleanAvatar(null); } })(), rating: Math.round(r.rating), games: r.games }));
+      return store.leaders(arg, PROVISIONAL_RD, 50).map(r => ({ name: r.name, avatar: lookOf(r), rating: shown(r.rating), tier: tierOf(shown(r.rating)).name, games: r.games }));
+    },
+    // /api/times/<difficulty>?kind=fastest|median&period=all|week
+    'GET /api/times': async (req, arg, url) => {
+      if (!DIFFICULTIES.includes(arg)) throw new HttpError(404, 'Unknown difficulty.');
+      const kind = url.searchParams.get('kind') === 'median' ? 'median' : 'fastest';
+      const period = url.searchParams.get('period') === 'week' ? 'week' : 'all';
+      return timeBoard(store, arg, kind, period, now()).map(r => ({ name: r.name, avatar: lookOf(r), time: r.time, solves: r.solves }));
+    },
+    'GET /api/daily': async req => {
+      const t = now(), day = dayKey(t);
+      const m = /^Bearer (.+)$/.exec(req.headers.authorization || '');
+      const u = m && userFromToken(m[1]);
+      const mine = u && store.dailyRun(day, u.id);
+      return {
+        day, number: dayNumber(day), difficulty: difficultyOf(day), resetsAt: Date.parse(day) + 86400e3, solved: store.dailyCount(day),
+        board: store.dailyBoard(day, 50).map(r => ({ name: r.name, avatar: lookOf(r), time: r.time, mistakes: r.mistakes })),
+        you: mine ? { status: mine.status, time: mine.time, mistakes: mine.mistakes, rank: mine.status === 'solved' ? store.dailyRank(day, mine.time) : null } : null
+      };
     },
     'GET /api/friends': async req => {
       const u = authed(req);
@@ -419,7 +505,7 @@ export async function createApp({ dbFile = join(ROOT, 'data', 'sudoku.db'), port
     if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
     try {
       if (!route) throw new HttpError(404, 'Not found');
-      const out = await route(req, isSub ? undefined : parts[3]);
+      const out = await route(req, isSub ? undefined : parts[3], url);
       const { status, payload } = out instanceof Reply ? out : { status: 200, payload: out };
       res.writeHead(status); res.end(JSON.stringify(payload));
     } catch (e) {
@@ -457,6 +543,10 @@ export async function createApp({ dbFile = join(ROOT, 'data', 'sudoku.db'), port
         else if (t - m.endedAt > KEEP_FINISHED) games.delete(m.id);
       }
       for (const [code, r] of rooms) if (t - r.created > ROOM_TTL) rooms.delete(code);
+      for (const [key, run] of dailyRuns) {
+        if (run.tick(t)) { const c = clients.get(key); endDailyIfDone(c ? c.ident : { userId: run.userId }, run, t); send(key, run.view(t)); }
+        if (run.status !== 'playing' && t - run.startedAt > DAILY_KEEP) dailyRuns.delete(key);
+      }
     }, 250),
     setInterval(matchmake, 1000),
     setInterval(() => { for (const ws of wss.clients) ws.ping(); }, 25e3)

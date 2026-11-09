@@ -176,7 +176,9 @@ export class Match {
       opp: { ...this.publicInfo(op), filled: op.filled, mistakes: op.mistakes, done: op.done, time: this.time(this.other(i)), connected: op.connected },
       result: this.result && { ...this.result, you: this.result.winner === null ? 'draw' : this.result.winner === i ? 'win' : 'loss' },
       ratingChange: this.ratingChange ? this.ratingChange[i] : null,
-      rematch: { you: this.rematch[i], opp: this.rematch[this.other(i)] }
+      rematch: { you: this.rematch[i], opp: this.rematch[this.other(i)] },
+      // For the replay chart once the result is in: [ms from go, 1 right / 0 mistake] per move.
+      timeline: this.result && this.status !== 'aborted' ? { you: me.moves.map(m => [m[0], m[3]]), opp: op.moves.map(m => [m[0], m[3]]) } : null
     };
   }
   publicInfo(p) { return { name: p.info.name, avatar: p.info.avatar, rating: p.info.rating, guest: !p.info.userId }; }
