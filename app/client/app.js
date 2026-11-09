@@ -1,4 +1,5 @@
 import { Board } from '/client/board.js';
+import { SERVER_URL, PUBLIC_URL } from '/client/config.js';
 import { AVATAR_SYMBOLS, AVATAR_COLORS, THEMES, cleanAvatar, cleanTheme } from '/shared/looks.js';
 
 const $ = id => document.getElementById(id);
@@ -26,7 +27,7 @@ const serverNow = () => Date.now() + S.offset;
 
 // ---------- network ----------
 function connect() {
-  const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
+  const ws = new WebSocket(SERVER_URL ? SERVER_URL.replace(/^http/, 'ws') + '/ws' : (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
   S.ws = ws;
   ws.onopen = () => { S.retry = 0; ws.send(JSON.stringify({ t: 'hello', token: S.token || undefined, guest: S.token ? undefined : S.guestToken || undefined })); };
   ws.onmessage = e => { let m; try { m = JSON.parse(e.data); } catch { return; } on[m.t]?.(m); };
@@ -42,7 +43,7 @@ const send = m => { if (S.ws && S.ws.readyState === 1) S.ws.send(JSON.stringify(
 function reconnect() { if (S.ws) { const w = S.ws; S.ws = null; w.close(); } connect(); }
 
 async function api(path, body) {
-  const r = await fetch(path, {
+  const r = await fetch(SERVER_URL + path, {
     method: body === undefined ? 'GET' : 'POST',
     headers: { 'Content-Type': 'application/json', ...(S.token ? { Authorization: 'Bearer ' + S.token } : {}) },
     body: body === undefined ? undefined : JSON.stringify(body)
@@ -176,7 +177,7 @@ function showSearching() {
   $('q-cancel').onclick = () => send({ t: 'unqueue' });
 }
 function showRoom() {
-  const r = S.room, url = location.origin + location.pathname + '#r=' + r.code;
+  const r = S.room, url = (PUBLIC_URL || location.origin + location.pathname) + '#r=' + r.code;
   const rules = `${DIFFS.find(d => d[0] === r.rules.difficulty)[1]} · ${r.rules.mistakes} mistake${r.rules.mistakes > 1 ? 's' : ''}`;
   if (r.invite) {
     showSheet(`<h2>Waiting for ${esc(r.invite)}</h2><div class="spin"></div><p class="dim" style="text-align:center">${rules}</p><button id="room-cancel">Cancel</button>`);

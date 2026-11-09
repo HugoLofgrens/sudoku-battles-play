@@ -5,6 +5,10 @@ const { chromium } = createRequire(import.meta.url)('playwright');   // the prei
 import { mkdirSync } from 'node:fs';
 import { createApp } from '../server/app.js';
 import { solve } from '../shared/sudoku.js';
+import { execFileSync } from 'node:child_process';
+import http from 'node:http';
+import { readFile } from 'node:fs/promises';
+import { join, extname } from 'node:path';
 
 const SHOTS = process.env.SHOTS || 'e2e-shots';
 mkdirSync(SHOTS, { recursive: true });
@@ -135,6 +139,26 @@ try {
   await s.waitForFunction(() => !document.querySelector('#overlay').classList.contains('show'), null, { timeout: 15000 });
   check((await boardOf(s)).filter(Boolean).length > 17, 'solo hard puzzle generated in a worker');
   await s.screenshot({ path: SHOTS + '/10-solo.png' });
+
+  // ---- the app build: client served from another origin, talking to the server ----
+  const www = new URL('../mobile/www/', import.meta.url).pathname;
+  execFileSync('node', [new URL('../mobile/build.mjs', import.meta.url).pathname], { env: { ...process.env, SERVER_URL: base.slice(0, -1), PUBLIC_URL: 'https://play.example/' } });
+  const shell = http.createServer(async (req, res) => {
+    const path = new URL(req.url, 'http://x').pathname;
+    try { const data = await readFile(join(www, path === '/' ? 'index.html' : path)); res.writeHead(200, { 'Content-Type': extname(path) === '.js' ? 'text/javascript' : 'text/html' }); res.end(data); }
+    catch { res.writeHead(404); res.end(); }
+  });
+  await new Promise(r => shell.listen(0, '127.0.0.1', r));
+  const m = await page('M');
+  await m.goto(`http://127.0.0.1:${shell.address().port}/`);
+  await m.waitForFunction(() => document.querySelector('#me-name').textContent.startsWith('Guest'));
+  await m.click('[data-tab="profile"]');
+  await m.fill('#auth-name', 'cleo'); await m.fill('#auth-pass', 'password123'); await m.click('#auth-go');
+  await m.waitForFunction(() => document.querySelector('#me-name').textContent === 'cleo');
+  await m.click('[data-tab="play"]'); await m.click('#make-link');
+  await m.waitForSelector('#room-url');
+  check((await m.inputValue('#room-url')).startsWith('https://play.example/#r='), 'app build reaches the server cross-origin, logs in, shares a web link');
+  shell.close();
 
   check(errors.length === 0, 'no page errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
   console.log('E2E PASSED');

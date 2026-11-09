@@ -141,8 +141,12 @@ The server keeps 4 ready puzzles per tier, made on a worker thread.
 - Rate limits: 10 logins per 15 min per address and name, 5 sign-ups per hour per address, and
   30 friend requests per hour.
 
+## Platforms
+
+Browser, iOS and Android, like chess.com. One web client: the server hosts it for the browser, and
+Capacitor wraps it for the apps (see the README).
+
 ## Not decided yet
 
-- Client technology. You chose native (answer 17C); see the README.
 - The test plan: who tests, and what counts as a pass (answers 19 and 20).
 - Opponent interaction: curses are kept out until you've checked the core.

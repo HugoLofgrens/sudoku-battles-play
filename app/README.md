@@ -36,9 +36,34 @@ npm run e2e          # real browser: guests by link, accounts in ranked, friends
 | `server/app.js` | HTTP API, WebSocket hub, matchmaking, rooms |
 | `client/` | Web client: plain JavaScript modules, no build step |
 
-## Client technology
+## Browser, iOS and Android
 
-Answer 17 was native apps (C). The server and protocol don't depend on that choice. The web
-client exists because it is the fastest way to test with friends: you send a link and nothing
-needs installing. A native iOS app needs a Mac with Xcode to build and test. Decide how to
-handle that before native work starts.
+Like chess.com: the same game in the browser and in both app stores, from one codebase. The
+apps are the web client inside a Capacitor shell (`mobile/`).
+
+| Platform | How |
+|---|---|
+| Browser | The server hosts the client. Open the site |
+| Android | `mobile/android`, a native Android Studio project |
+| iOS | `mobile/ios`, a native Xcode project (Swift Package Manager, no CocoaPods) |
+
+The client has to be told where the server is, because inside an app the page doesn't come
+from the server:
+
+```
+cd mobile && npm ci
+SERVER_URL=https://your-server npm run build    # copies client/ + shared/ into www/
+npx cap sync                                     # copies www/ into both native projects
+```
+
+GitHub Actions (`.github/workflows/apps.yml`) runs the tests and then builds both apps on every
+push. Android builds on Linux. iOS builds on GitHub's macOS machines, so no Mac is needed to
+compile. The Android build produces an APK you can install on a phone. Set the repository
+variable `SERVER_URL` so the builds point at the live server.
+
+**Still needed for the stores:**
+- **Apple:** a Developer account ($99/year). Signing and TestFlight can also run on GitHub's
+  macOS machines.
+- **Google:** a Play Console account ($25 once) and a signing key.
+- **Both:** app icons and a splash screen.
+

@@ -1,0 +1,8 @@
+{
+  "appId": "com.hugolofgrens.sudokubattles",
+  "appName": "Sudoku Battles",
+  "webDir": "www",
+  "backgroundColor": "#14161b",
+  "ios": { "contentInset": "never" },
+  "android": { "backgroundColor": "#14161b" }
+}

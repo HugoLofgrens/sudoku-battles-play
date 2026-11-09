@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Sudoku Battles</string>
+    <string name="title_activity_main">Sudoku Battles</string>
+    <string name="package_name">com.hugolofgrens.sudokubattles</string>
+    <string name="custom_url_scheme">com.hugolofgrens.sudokubattles</string>
+</resources>

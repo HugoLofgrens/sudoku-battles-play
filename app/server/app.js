@@ -415,6 +415,7 @@ export async function createApp({ dbFile = join(ROOT, 'data', 'sudoku.db'), port
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
     try {
       if (!route) throw new HttpError(404, 'Not found');
