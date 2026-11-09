@@ -1,14 +1,16 @@
 // Plays the real Android app in an emulator: a live friend race against a scripted opponent.
 // Run by CI (.github/workflows/apps.yml, job android-emulator) with the server on the host at
 // :8080 and an APK built with SERVER_URL=http://10.0.2.2:8080 (the emulator's name for the host).
-//   node test/android.mjs <apk> <screenshot dir>
+//   adb install -r <apk> && node test/android.mjs <screenshot dir>
 import { createRequire } from 'node:module';
 import { mkdirSync } from 'node:fs';
 import WebSocket from 'ws';
 import { solve } from '../shared/sudoku.js';
 const { _android: android } = createRequire(import.meta.url)('playwright');
 
-const [apk, shots = 'android-shots'] = process.argv.slice(2);
+const [shots = 'android-shots'] = process.argv.slice(2);
+// Never hang CI: a stuck step fails the run instead.
+setTimeout(() => { console.error('FAILED: timed out'); process.exit(1); }, 8 * 60e3).unref();
 const PKG = 'com.hugolofgrens.sudokubattles';
 mkdirSync(shots, { recursive: true });
 const check = (ok, msg) => { if (!ok) throw new Error('FAILED: ' + msg); console.log('ok -', msg); };
@@ -16,7 +18,6 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 const [device] = await android.devices();
 check(!!device, 'emulator found: ' + device.model());
-await device.installApk(apk);
 await device.shell(`am start -n ${PKG}/.MainActivity`);
 const page = await (await device.webView({ pkg: PKG }, { timeout: 60000 })).page();
 const shot = async name => { await sleep(600); await device.screenshot({ path: `${shots}/${name}.png` }); };
@@ -74,5 +75,6 @@ try {
   console.error(e.message);
   process.exitCode = 1;
 } finally {
-  await device.close();
+  await device.close().catch(() => {});
+  process.exit(process.exitCode || 0);
 }

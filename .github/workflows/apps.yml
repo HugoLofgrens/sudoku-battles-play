@@ -81,6 +81,7 @@ jobs:
   android-emulator:
     needs: test
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -115,7 +116,7 @@ jobs:
           profile: pixel_6
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
-          script: cd app && node test/android.mjs mobile/android/app/build/outputs/apk/debug/app-debug.apk android-shots
+          script: adb install -r app/mobile/android/app/build/outputs/apk/debug/app-debug.apk && cd app && node test/android.mjs android-shots
       - if: always()
         uses: actions/upload-artifact@v4
         with:
