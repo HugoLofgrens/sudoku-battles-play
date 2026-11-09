@@ -1,0 +1,126 @@
+# Tests the server, then builds three downloads: the Wi-Fi (LAN) package, the Android app and
+# an iOS build check. No Mac needed: iOS builds on GitHub's macOS machines.
+# Optional repository variable SERVER_URL (Settings > Secrets and variables > Actions > Variables):
+# the online server the apps connect to. Without it the apps ask for an address (LAN play).
+name: apps
+
+on:
+  push:
+    paths: ['app/**', '.github/workflows/apps.yml']
+  workflow_dispatch:
+
+env:
+  SERVER_URL: ${{ vars.SERVER_URL }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: app } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm ci
+      - run: npm test
+
+  lan:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Package the server with its one dependency
+        run: |
+          cd app && npm ci --omit=dev && cd ..
+          mkdir -p dist/sudoku-battles
+          cp -r app/server app/client app/shared app/node_modules app/package.json app/start.bat app/start.sh app/PLAY-ON-WIFI.txt dist/sudoku-battles/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sudoku-battles-wifi
+          path: dist
+
+  android:
+    needs: test
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: app/mobile } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 21 }
+      - run: npm ci
+      - run: npm run build
+      - run: npx cap sync android
+      - run: ./gradlew assembleDebug --no-daemon
+        working-directory: app/mobile/android
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sudoku-battles-android-debug
+          path: app/mobile/android/app/build/outputs/apk/debug/app-debug.apk
+
+  ios:
+    needs: test
+    runs-on: macos-latest
+    defaults: { run: { working-directory: app/mobile } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: maxim-lobanov/setup-xcode@v1
+        with: { xcode-version: latest-stable }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm ci
+      - run: npm run build
+      - run: npx cap sync ios
+      - name: Build for the iOS simulator (unsigned)
+        run: xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build | tail -n 40
+
+  # Boots a real Android emulator, installs the app and plays a live race against a scripted
+  # opponent, with the server running next to it. Screenshots are uploaded.
+  android-emulator:
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 21 }
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Start the server
+        working-directory: app
+        run: |
+          npm ci
+          npm i --no-save playwright@1.63.0
+          nohup node --no-warnings server/main.js > server.log 2>&1 &
+          sleep 2 && curl -sf http://127.0.0.1:8080/ > /dev/null
+      - name: Build the APK for the emulator (server = the host)
+        working-directory: app/mobile
+        run: |
+          npm ci
+          SERVER_URL=http://10.0.2.2:8080 npm run build
+          npx cap sync android
+          cd android && ./gradlew assembleDebug --no-daemon
+      - name: Play a race on the emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
+          script: adb install -r app/mobile/android/app/build/outputs/apk/debug/app-debug.apk && cd app && node test/android.mjs android-shots
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-emulator-screens
+          path: |
+            app/android-shots
+            app/server.log
