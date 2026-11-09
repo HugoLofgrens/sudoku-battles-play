@@ -14,8 +14,9 @@
 :root{--bg:#121418;--cell:#1e2128;--line:#323741;--thick:#8b919d;--given:#eceef2;--user:#8ab4ff;--note:#8a909b;--hi:#3b82f6;--hi-ink:#fff;--sel:#1e40af;--peer:#4a505b;--dead:#16181d;--panel:#191c22;--opp:#a3aab6;--bad:#ff5d5d;--good:#6bd68a;--s:min(94vw,calc(100dvh - 290px),560px)}
 *{box-sizing:border-box}
 html,body{margin:0;height:100%}
-body{background:var(--bg);color:var(--given);font:16px system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-tap-highlight-color:transparent;display:flex;flex-direction:column}
-button{font:inherit;color:inherit;background:var(--cell);border:1px solid var(--line);border-radius:10px;padding:10px 14px;cursor:pointer}
+body{background:var(--bg);color:var(--given);font:16px system-ui,-apple-system,"Segoe UI",sans-serif;--font:system-ui,sans-serif;-webkit-tap-highlight-color:transparent;display:flex;flex-direction:column}
+button{font:inherit;color:inherit;background:var(--cell);border:1px solid var(--line);border-radius:10px;padding:10px 14px;cursor:pointer;transition:transform .08s,background .15s}
+button:active:not(:disabled){transform:scale(.97)}
 button:disabled{opacity:.4;cursor:default}
 button.main{background:var(--hi);color:var(--hi-ink);border-color:var(--hi);font-weight:700}
 button.ghost{background:none}
@@ -29,7 +30,8 @@ h2{font-size:18px}
 
 /* shell */
 #top{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 16px;padding-top:max(10px,env(safe-area-inset-top))}
-.brand{font-weight:800;letter-spacing:.2px}
+.brand{display:flex;align-items:center;gap:8px;font-weight:800;letter-spacing:.2px}
+.brand svg{width:22px;height:22px}
 main{flex:1;overflow:auto}
 .screen{max-width:520px;margin:0 auto;padding:6px 16px 24px;display:flex;flex-direction:column;gap:12px}
 #tabs{display:flex;border-top:1px solid var(--line);background:var(--panel);padding-bottom:env(safe-area-inset-bottom)}
@@ -66,9 +68,9 @@ main{flex:1;overflow:auto}
 /* game */
 body.ingame #top,body.ingame #tabs{display:none}
 #s-game{max-width:none;align-items:center;justify-content:center;min-height:100%;gap:8px;padding-top:max(8px,env(safe-area-inset-top))}
-body.solo{--s:min(94vw,calc(100dvh - 210px),560px)}
+body.single{--s:min(94vw,calc(100dvh - 210px),560px)}
 #bars{width:var(--s);display:flex;flex-direction:column;gap:6px}
-body.solo #bars{display:none}
+body.single #bars{display:none}
 .pbar{display:grid;grid-template-columns:auto 1fr auto;grid-template-rows:auto auto;column-gap:8px;row-gap:3px;align-items:center}
 .pbar .av{grid-row:1/3;width:34px;height:34px}
 .pbar .top{display:flex;gap:6px;align-items:baseline;min-width:0;font-weight:600;font-size:15px}
@@ -85,6 +87,7 @@ body.solo #bars{display:none}
 #clock{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums}
 #status-line{font-size:14px;color:var(--note);text-align:right}
 #wrap{position:relative;width:var(--s)}
+#board,#pad{font-family:var(--font)}
 #board{width:100%;aspect-ratio:1;display:grid;grid-template-columns:repeat(9,1fr);grid-template-rows:repeat(9,1fr);border:3px solid var(--thick);border-radius:4px;overflow:hidden;user-select:none}
 .c{position:relative;display:flex;align-items:center;justify-content:center;background:var(--cell);border:solid var(--line);border-width:0 1px 1px 0;font-size:calc(var(--s)*.058);cursor:pointer;min-width:0;min-height:0}
 .c.r{border-right:2px solid var(--thick)}
@@ -133,11 +136,62 @@ body.solo #bars{display:none}
 .spin{width:28px;height:28px;border:3px solid var(--line);border-top-color:var(--hi);border-radius:50%;animation:sp 1s linear infinite;margin:4px auto}
 @keyframes sp{to{transform:rotate(360deg)}}
 @media (max-height:640px){#pad button small{display:none}}
+
+/* ranks, tiers, stats */
+.tier{display:inline-flex;align-items:center;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:800;letter-spacing:.3px;color:#111;background:var(--tc);text-transform:uppercase;vertical-align:middle}
+.tile span.tier{margin-top:4px;color:#111;font-size:10px}
+.rank-n{width:26px;color:var(--note);font-variant-numeric:tabular-nums}
+.item.me{background:color-mix(in srgb,var(--hi) 12%,transparent);border-radius:8px;padding-left:6px;padding-right:6px}
+.medal-1{color:#e2b84a}.medal-2{color:#c9d1dc}.medal-3{color:#c98a54}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.stats div{background:var(--cell);border-radius:10px;padding:8px;text-align:center}
+.stats b{display:block;font-size:18px;font-variant-numeric:tabular-nums}
+.stats span{font-size:11px;color:var(--note)}
+.chart{width:100%;height:160px;display:block}
+.chart text{fill:var(--note);font-size:10px;font-family:system-ui,sans-serif}
+.chart .grid{stroke:var(--line);stroke-width:1;vector-effect:non-scaling-stroke}
+.legend{display:flex;gap:14px;justify-content:center;font-size:12px;color:var(--note)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+.setting{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.switch{width:46px;height:28px;padding:0;border-radius:999px;position:relative;flex:none}
+.switch::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:var(--note);transition:left .15s,background .15s}
+.switch[aria-pressed=true]{background:var(--hi);border-color:var(--hi)}
+.switch[aria-pressed=true]::after{left:21px;background:#fff}
+.daily h2{display:flex;align-items:center;gap:8px}
+.daily .flame{font-size:18px}
+.ticker{min-height:40px;text-align:center;font-size:14px;line-height:1.4;color:var(--note);padding:2px 8px;transition:opacity .4s}
+.ticker.fade{opacity:0}
+.ticker b{color:var(--given);font-weight:600}
+#sheet .ticker{margin-top:2px}
+
+/* board looks */
+body.cells-rounded #board{gap:2px;border:0;border-radius:0;overflow:visible}
+body.cells-rounded .c{border:0;border-radius:6px}
+body.cells-rounded .c.r{margin-right:3px}
+body.cells-rounded .c.b{margin-bottom:3px}
+body.cells-minimal .c{border-right-color:transparent;border-bottom-color:transparent}
+body.cells-minimal .c.r{border-right-color:var(--thick)}
+body.cells-minimal .c.b{border-bottom-color:var(--thick)}
+body.no-counts #pad button small{display:none}
+
+/* motion */
+.c.popped{animation:pop .22s ease-out}
+@keyframes pop{40%{transform:scale(1.2)}100%{transform:scale(1)}}
+.c.swept{animation:sweep .5s ease-out}
+@keyframes sweep{30%{background:color-mix(in srgb,var(--hi) 55%,var(--cell));color:#fff}}
+.shake{animation:shake .32s}
+@keyframes shake{20%,60%{transform:translateX(-6px)}40%,80%{transform:translateX(6px)}}
+#overlay.count span{display:inline-block;animation:count .95s ease-out both}
+@keyframes count{0%{transform:scale(1.9);opacity:0}25%{opacity:1}100%{transform:scale(1);opacity:.9}}
+.pbar.near .prog i{box-shadow:0 0 10px var(--hi)}
+#sheet.show .card{animation:rise .22s ease-out}
+@keyframes rise{from{transform:translateY(24px);opacity:0}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
 <body>
 <header id="top">
-  <span class="brand">Sudoku Battles</span>
+  <span class="brand"><svg viewBox="0 0 30 30" aria-hidden="true"><rect x="0" y="0" width="8.6" height="8.6" rx="2" fill="#262a32"/><rect x="10.7" y="0" width="8.6" height="8.6" rx="2" fill="#4a505b"/><rect x="21.4" y="0" width="8.6" height="8.6" rx="2" fill="var(--hi)"/><rect x="0" y="10.7" width="8.6" height="8.6" rx="2" fill="#4a505b"/><rect x="10.7" y="10.7" width="8.6" height="8.6" rx="2" fill="var(--sel)"/><rect x="21.4" y="10.7" width="8.6" height="8.6" rx="2" fill="#4a505b"/><rect x="0" y="21.4" width="8.6" height="8.6" rx="2" fill="#262a32"/><rect x="10.7" y="21.4" width="8.6" height="8.6" rx="2" fill="#4a505b"/><rect x="21.4" y="21.4" width="8.6" height="8.6" rx="2" fill="#262a32"/></svg>Sudoku Battles</span>
   <button id="me-chip" class="chip ghost"><span class="av"></span><span id="me-name">…</span></button>
 </header>
 <main>
@@ -147,6 +201,13 @@ body.solo #bars{display:none}
       <p class="dim" id="server-info"></p>
       <div class="row"><input id="server-addr" placeholder="192.168.1.20:8080" inputmode="url" autocapitalize="off" autocomplete="off"><button id="server-go" style="flex:none">Connect</button></div>
     </div>
+    <div class="card daily" id="daily-card">
+      <div class="row">
+        <div style="flex:1"><h2 id="daily-title">Daily puzzle</h2><p class="dim" id="daily-info">Same puzzle for everyone today.</p></div>
+        <button id="daily-go" class="main" style="flex:none">Play</button>
+      </div>
+    </div>
+    <p class="ticker" id="ticker" aria-live="polite"></p>
     <div class="card">
       <h2>Ranked</h2>
       <div class="seg" data-pref="rankedDiff"></div>
@@ -164,6 +225,17 @@ body.solo #bars{display:none}
       <h2>Solo</h2>
       <div class="seg" data-pref="soloDiff"></div>
       <div class="row"><button id="solo-new" class="main">New puzzle</button><button id="solo-continue" hidden>Continue</button></div>
+    </div>
+  </section>
+
+  <section id="s-ranks" class="screen" hidden>
+    <div class="card">
+      <div class="seg" data-pref="rankKind"></div>
+      <div class="seg" data-pref="boardDiff" id="ranks-diff"></div>
+      <div class="seg" data-pref="rankPeriod" id="ranks-period"></div>
+      <p class="dim" id="ranks-note"></p>
+      <div class="list" id="ranks"></div>
+      <p class="dim" id="ranks-empty" hidden></p>
     </div>
   </section>
 
@@ -187,27 +259,32 @@ body.solo #bars{display:none}
       <input id="auth-pass" type="password" placeholder="Password (8+ characters)" autocomplete="current-password">
       <p class="err" id="auth-err"></p>
       <button id="auth-go" class="main">Log in</button>
-      <p class="dim">Guests can play solo and friend games. An account adds ranked, ratings, stats and friends.</p>
+      <p class="dim">Guests can play solo, friend games and the daily puzzle. An account adds ranked, ratings, stats, leaderboards and friends.</p>
     </div>
     <div id="profile-acct" class="screen" style="padding:0" hidden>
       <div class="card">
         <div class="row" style="justify-content:flex-start"><span class="av big" id="p-av" style="flex:none"></span><div><h2 id="p-name"></h2><p class="dim" id="p-joined"></p></div></div>
         <div class="tiles" id="p-ratings"></div>
         <div class="tiles" id="p-totals"></div>
-        <p class="dim" id="p-best"></p>
       </div>
+      <div class="card"><h2>Rating</h2><div class="seg" data-pref="histDiff"></div><div id="p-chart"></div></div>
+      <div class="card"><h2>Times</h2><div class="seg" data-pref="timesDiff"></div><div id="p-times"></div></div>
       <div class="card"><h2>Recent games</h2><div class="list" id="p-recent"></div><p class="dim" id="p-norecent">No games yet.</p></div>
+    </div>
+    <div class="card">
+      <h2>Settings</h2>
+      <div class="setting"><span>Sound</span><button class="switch" id="set-sound" aria-label="Sound"></button></div>
+      <div class="setting"><span>Vibration</span><button class="switch" id="set-vibrate" aria-label="Vibration"></button></div>
+      <div class="setting"><span>Numbers left on the pad</span><button class="switch" id="set-counts" aria-label="Numbers left"></button></div>
     </div>
     <div class="card">
       <h2>Look</h2>
       <div class="picker" id="pick-symbol"></div>
       <div class="picker" id="pick-color"></div>
-      <div class="seg" id="pick-theme"></div>
-    </div>
-    <div class="card">
-      <h2>Top players</h2>
-      <div class="seg" data-pref="boardDiff"></div>
-      <div class="list" id="leaders"></div><p class="dim" id="leaders-empty">Nobody has a settled rating yet.</p>
+      <span class="dim">Theme</span><div class="seg" id="pick-theme"></div>
+      <span class="dim">Accent</span><div class="picker" id="pick-accent"></div>
+      <span class="dim">Board</span><div class="seg" id="pick-cells"></div>
+      <span class="dim">Numbers</span><div class="seg" id="pick-font"></div>
     </div>
     <button id="logout" class="ghost danger" hidden>Log out</button>
   </section>
@@ -230,6 +307,7 @@ body.solo #bars{display:none}
 </main>
 <nav id="tabs">
   <button data-tab="play" class="on">Play</button>
+  <button data-tab="ranks">Ranks</button>
   <button data-tab="friends">Friends<span class="badge" id="friends-badge" hidden></span></button>
   <button data-tab="profile">Profile</button>
 </nav>

@@ -22,7 +22,7 @@ plan sleeps when idle and wipes its disk on restart, so accounts reset.
 ## Test
 
 ```
-npm test             # 28 tests: puzzles, rating math, every match rule, the server end to end
+npm test             # 36 tests: puzzles, rating math and a simulated ladder, every match rule, daily, stats, the server end to end
 npm run e2e          # real browser: guests by link, accounts in ranked, friends, solo
 ```
 
@@ -36,7 +36,12 @@ npm run e2e          # real browser: guests by link, accounts in ranked, friends
 | `shared/sudoku.js` | Generator, solver and grader, moved unchanged from the prototype |
 | `shared/looks.js` | Avatars and themes |
 | `server/match.js` | Every race rule, as pure logic |
-| `server/glicko2.js` | Rating math |
+| `server/glicko2.js` | Glicko-2 math |
+| `server/rating.js` | Shown rating (500..10,000), margin bonus |
+| `server/daily.js` | The daily puzzle |
+| `server/stats.js` | Time stats and time leaderboards |
+| `shared/tiers.js`, `shared/facts.js` | Rank tiers; the facts and tips line |
+| `client/settings.js`, `sound.js`, `fx.js`, `charts.js` | Settings, sound and haptics, animation, SVG charts |
 | `server/db.js` | SQLite tables and queries |
 | `server/app.js` | HTTP API, WebSocket hub, matchmaking, rooms |
 | `client/` | Web client: plain JavaScript modules, no build step |

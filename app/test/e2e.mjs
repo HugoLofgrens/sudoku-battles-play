@@ -122,7 +122,7 @@ try {
   await fill(d, sol2, e2.slice(15));
   await d.waitForSelector('#sheet.show h1.win');
   const rt = await d.textContent('#sheet');
-  check(/Rating \d+\?? \(\+\d+\)/.test(rt), 'winner sees a rating gain: ' + rt.match(/Rating[^)]*\)/)[0]);
+  check(/\d+\?? \(\+\d+\)/.test(rt), 'winner sees a rating gain: ' + rt.match(/\d+\?? \(\+\d+\)/)[0]);
   await d.screenshot({ path: SHOTS + '/9-ranked-win.png' });
   await c.waitForSelector('#sheet.show #r-stop');
   await c.click('#r-stop');

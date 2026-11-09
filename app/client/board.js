@@ -1,14 +1,15 @@
 // The 9x9 board, number pad and keyboard. Same input as the prototype: tap a cell then a number,
 // or pick a number first and tap cells. In a race the board only shows what the server confirmed.
-import { IDX, PEERS, rowOf, colOf } from '/shared/sudoku.js';
+import { IDX, PEERS, HOUSES, rowOf, colOf } from '/shared/sudoku.js';
 
 // 1 = next to the pressed cell ... 4 = far end of its row or column.
 const fade = (a, b) => { const d = Math.max(Math.abs(rowOf(a) - rowOf(b)), Math.abs(colOf(a) - colOf(b))); return d <= 1 ? 1 : d === 2 ? 2 : d <= 4 ? 3 : 4; };
 
 export class Board {
-  constructor(boardEl, padEl, { onPlace, onChange = () => {} }) {
+  // onFx({type: 'ok'|'bad'|'note'|'house', cell, cells}) drives sound, haptics and animation.
+  constructor(boardEl, padEl, { onPlace, onChange = () => {}, onFx = () => {} }) {
     this.el = boardEl; this.padEl = padEl;
-    this.onPlace = onPlace; this.onChange = onChange;
+    this.onPlace = onPlace; this.onChange = onChange; this.onFx = onFx;
     this.given = Array(81).fill(0); this.v = Array(81).fill(0); this.n = Array(81).fill(0);
     this.sel = null; this.active = null; this.hover = null; this.noteMode = false;
     this.locked = true; this.free = false; this.flash = -1; this.pending = new Map();
@@ -53,7 +54,7 @@ export class Board {
 
   place(i, d) {
     if (this.free) {
-      this.snap(); this.v[i] = d; this.clearNotesFor(i, d);
+      this.snap(); this.v[i] = d; this.clearNotesFor(i, d); this.celebrate(i);
       this.sel = null; this.active = d; this.onChange(); this.onPlace(i, d);
       return;
     }
@@ -65,11 +66,17 @@ export class Board {
   // Server answer for a race move.
   placed(i, d, ok) {
     this.pending.delete(i);
-    if (ok) { this.v[i] = d; this.clearNotesFor(i, d); if (this.sel === i) this.sel = null; }
-    else if (ok === false) { this.flash = i; clearTimeout(this.flashTimer); this.flashTimer = setTimeout(() => { this.flash = -1; this.render(); }, 700); }
+    if (ok) { this.v[i] = d; this.clearNotesFor(i, d); if (this.sel === i) this.sel = null; this.celebrate(i); }
+    else if (ok === false) { this.onFx({ type: 'bad', cell: i }); this.flash = i; clearTimeout(this.flashTimer); this.flashTimer = setTimeout(() => { this.flash = -1; this.render(); }, 700); }
     this.render();
   }
-  toggleNote(i, d) { if (this.free) this.snap(); this.n[i] ^= 1 << d; this.active = d; this.onChange(); }
+  toggleNote(i, d) { if (this.free) this.snap(); this.n[i] ^= 1 << d; this.active = d; this.onChange(); this.onFx({ type: 'note', cell: i }); }
+  // A placed digit: pop, and a sweep for every row, column or box it finished.
+  celebrate(i) {
+    const done = HOUSES.filter(h => h.includes(i) && h.every(j => this.v[j]));
+    this.onFx({ type: 'ok', cell: i });
+    if (done.length) this.onFx({ type: 'house', cell: i, cells: [...new Set(done.flat())] });
+  }
 
   digit(d, forceNote) {
     if (this.locked) return;

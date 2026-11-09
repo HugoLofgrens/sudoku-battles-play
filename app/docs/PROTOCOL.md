@@ -14,14 +14,16 @@ with a 4xx/5xx status.
 | POST | `/api/logout` 🔒 | | `{}` |
 | GET | `/api/me` 🔒 | | `me` |
 | POST | `/api/me/look` 🔒 | `{avatar:{s,c}, theme}` | `me` |
-| GET | `/api/profile/:name` | | profile with ratings, totals, streaks, best times, last 20 games |
-| GET | `/api/leaderboard/:difficulty` | | top 50 settled ratings |
+| GET | `/api/profile/:name` | | ratings, totals, streaks, last 20 games, `times` (per difficulty: count, best, mean, median, p25, p10, p5, fasterThan, of), `history` (per difficulty: `[[at, rating]]`) |
+| GET | `/api/leaderboard/:difficulty` | | top 50 ratings `{name, avatar, rating, provisional, tier, games}` |
+| GET | `/api/times/:difficulty?kind=fastest\|median&period=all\|week` | | time board `{name, avatar, time, solves?}` |
+| GET | `/api/daily` (🔒 optional) | | `{day, number, difficulty, resetsAt, solved, board:[{name, avatar, time, mistakes}], you:{status, time, mistakes, rank}\|null}` |
 | GET | `/api/friends` 🔒 | | `[{name, avatar, status: friend\|incoming\|outgoing, online, playing}]` |
 | POST | `/api/friends/add` 🔒 | `{name}` | `{status: pending\|accepted}` |
 | POST | `/api/friends/accept` 🔒 | `{name}` | `{status}` |
 | POST | `/api/friends/remove` 🔒 | `{name}` | `{}` (also declines and cancels requests) |
 
-`me` = `{id, name, avatar, theme, guest:false, ratings:{medium|hard|extreme:{rating, rd, provisional, games, wins, losses, draws, peak}}}`
+`me` = `{id, name, avatar, theme, guest:false, ratings:{medium|hard|extreme:{rating, provisional, tier, games, wins, losses, draws, peak}}}`. Ratings are the shown 500..10,000 numbers; Glicko values stay on the server.
 
 ## WebSocket `/ws`
 
@@ -43,6 +45,9 @@ The first message must be `hello`. One socket per identity: a new one replaces t
 | `abort` | | Only in the first 20 s, before trying any cell |
 | `rematch` | `game` | Friend games, after the result |
 | `leave` | | Done looking at a finished game |
+| `daily.start` | | Start (or resume) today's daily; answered with `daily`, or `daily.done` if already played |
+| `daily.place` | `cell, digit` | A daily move |
+| `daily.giveup` | | End today's attempt |
 | `ping` | | Answered with `pong {serverNow}` |
 
 ### Server → client
@@ -59,6 +64,9 @@ The first message must be `hello`. One socket per identity: a new one replaces t
 | `replaced` | Opened somewhere else |
 | `placed` | `cell, digit, ok` (`true` right, `false` mistake, `null` refused with `reason`) |
 | `game` | The full game view, sent after every change (below) |
+| `daily` | `{day, number, difficulty, puzzle, board, toFill, filled, mistakes, mistakesAllowed, status: playing\|solved\|out\|gaveup\|timeout, time, startedAt, serverNow, capAt}` |
+| `daily.placed` | like `placed` |
+| `daily.done` | `{day, status, time, mistakes}`: already played today |
 
 ### The game view
 
@@ -70,8 +78,9 @@ The first message must be `hello`. One socket per identity: a new one replaces t
   you: {index, name, avatar, rating, guest, filled, mistakes, done, time},
   opp: {name, avatar, rating, guest, filled, mistakes, done, time, connected},
   result: {winner, reason, at, you: win|loss|draw} | null,
-  ratingChange: {before, after, delta, provisional} | null,
-  rematch: {you, opp} }
+  ratingChange: {before, after, delta, provisional, tier, margin (0-100), gain (1-2)} | null,
+  rematch: {you, opp},
+  timeline: {you: [[ms, 1|0]], opp: [[ms, 1|0]]} | null }   // after the result: each move, right (1) or mistake (0)
 ```
 
 `done` is null while playing, otherwise `solved | out | gaveup | disconnect | timeout`.

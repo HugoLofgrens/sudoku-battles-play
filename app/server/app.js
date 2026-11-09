@@ -367,8 +367,8 @@ export async function createApp({ dbFile = join(ROOT, 'data', 'sudoku.db'), port
     const res = g.winner === null ? 'draw' : g.winner === i ? 'win' : 'loss';
     return { id: g.id, kind: g.kind, difficulty: g.difficulty, when: g.created, result: res, reason: g.reason,
       opponent: g['p' + o + '_name'], time: g['p' + i + '_time'], mistakes: g['p' + i + '_mistakes'],
-      ratingBefore: g['p' + i + '_before'] == null ? null : Math.round(g['p' + i + '_before']),
-      ratingAfter: g['p' + i + '_after'] == null ? null : Math.round(g['p' + i + '_after']) };
+      ratingBefore: g['p' + i + '_before'] == null ? null : shown(g['p' + i + '_before']),
+      ratingAfter: g['p' + i + '_after'] == null ? null : shown(g['p' + i + '_after']) };
   }
   function profile(u) {
     const games = store.recent(u.id, 200).map(g => gameRow(g, u.id));
@@ -426,7 +426,8 @@ export async function createApp({ dbFile = join(ROOT, 'data', 'sudoku.db'), port
     },
     'GET /api/leaderboard': async (req, arg) => {
       if (!DIFFICULTIES.includes(arg)) throw new HttpError(404, 'Unknown difficulty.');
-      return store.leaders(arg, PROVISIONAL_RD, 50).map(r => ({ name: r.name, avatar: lookOf(r), rating: shown(r.rating), tier: tierOf(shown(r.rating)).name, games: r.games }));
+      // Like chess.com: everyone with a rated game, provisional ratings marked.
+      return store.leaders(arg, 50).map(r => ({ name: r.name, avatar: lookOf(r), rating: shown(r.rating), provisional: r.rd > PROVISIONAL_RD, tier: tierOf(shown(r.rating), r.rd > PROVISIONAL_RD).name, games: r.games }));
     },
     // /api/times/<difficulty>?kind=fastest|median&period=all|week
     'GET /api/times': async (req, arg, url) => {

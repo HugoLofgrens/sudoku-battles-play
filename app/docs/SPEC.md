@@ -1,7 +1,8 @@
 # Sudoku Battles: test version spec
 
 Hugo's answers from 2026-11-09 are the source. Every number here is the value in the code
-(`server/match.js` `RULES`, `server/glicko2.js`, `server/app.js`). Change both together.
+(`server/match.js` `RULES`, `server/rating.js`, `server/glicko2.js`, `server/daily.js`,
+`server/stats.js`). Change both together.
 
 ## Product
 
@@ -10,8 +11,11 @@ friends, custom rules for friend games. Extras come later.
 
 | Who | Can do |
 |---|---|
-| Guest (no login) | Solo sudoku. 1v1 with a friend by link or code. No stats, no rating. |
-| Account | Everything a guest can, plus ranked vs strangers, ratings, stats, friends, challenges. |
+| Guest (no login) | Solo, 1v1 with a friend by link or code, the daily puzzle (not on its board). No stats, no rating. |
+| Account | Everything a guest can, plus ranked vs strangers, ratings, time stats, leaderboards, friends, challenges. |
+
+Tabs: **Play** (daily, ranked, friend, solo), **Ranks** (leaderboards), **Friends**, **Profile**
+(stats, graphs, settings, look).
 
 ## The race
 
@@ -74,22 +78,41 @@ The server keeps 4 ready puzzles per tier, made on a worker thread.
 
 ## Rating
 
-- **Glicko-2**, the system chess.com and Lichess use. Checked against the worked example in
-  Glickman's paper (`test/glicko2.test.js`).
-- **One rating per difficulty**, the way chess has one per time control.
-- Starting values are rating 1500, RD 350 and volatility 0.06, with τ = 0.5. RD stays between 45 and 350.
-- Each game is rated right after it ends, using both players' ratings from before the game.
-  Draws count as 0.5.
-- Shown as `1500?` while RD > 110 (provisional). The leaderboard lists only settled ratings.
-- RD grows by one Glicko-2 period per full idle week, so a returning player's rating moves
-  faster.
+Chess.com-style, with a bonus for big wins (Hugo, 2026-11-09).
+
+- **Math:** Glicko-2, the family chess.com and Lichess use, on its standard 1500 scale and
+  checked against Glickman's worked example. Start RD 350, volatility 0.06, τ = 0.5, RD 45–350.
+  Each game is rated right after it ends, from both players' pre-game values. Draws count 0.5.
+  RD grows one period per idle week.
+- **What players see:** `shown = 500 · e^(0.45 · μ)`, with μ the Glicko skill in its own units.
+  - Everyone starts at **500**.
+  - Better than average climbs ever faster; only an extreme outlier nears **10,000**, the hard
+    cap.
+  - Worse than average sinks toward 0 but never goes below 1.
+  - Points scale with your level, so a win near 5,000 moves about 10× more than one near 500.
+  - Ranking order is the Glicko order, so the curve changes nothing about who is better.
+  - Retune 0.45 once real players exist, so that the #1 sits near 10,000.
+- **Margin bonus:** the rating change is multiplied by a gain from 1 (photo finish) to 2
+  (blowout), for both players.
+  - Solve: margin = the share of the puzzle the loser still had left. That equals the time
+    gap, because a loser at fraction f would need 1/f of the winner's time.
+  - Mistakes-out, give-up, disconnect: full margin. Quitting is never cheaper than losing.
+  - Time cap: the difference in progress. Draw: no bonus.
+  - When the favorite wins, the bonus is damped (2.2 / (2.2 + 0.001 · rating gap)), so
+    crushing much weaker players doesn't farm points.
+- **Tiers** (by shown rating): Bronze < 400, Silver 400, Gold 700, Platinum 1000, Diamond 1400,
+  Master 1900, Grandmaster 2500. While RD > 110, the tier reads **Placement** and the rating
+  is marked `?`.
+- **One rating per difficulty**, like chess's time controls.
 - **What keeps it honest:**
-  - Only the server rates games.
-  - Only ranked games between two different accounts are rated.
-  - Each game is rated once: an atomic flag in the same database transaction as the update.
-  - Aborted games are never rated.
-  - The client never receives the solution.
-  - Every move is stored with its time, for later review.
+  - Only the server rates games, and only ranked games between two different accounts.
+  - Each game is rated once: an atomic flag in the same transaction as the update.
+  - Aborted games are never rated, including games cut off by a server restart.
+  - The client never gets the solution.
+  - Every move is stored with its time.
+  - The same two accounts aren't paired again within 10 minutes, unless one has waited 30 s.
+- `test/rating.test.js` simulates a 120-player ladder: rating order matches hidden skill (rank
+  correlation > 0.95) and the average does not drift.
 
 ### Matchmaking
 
@@ -105,6 +128,34 @@ The server keeps 4 ready puzzles per tier, made on a worker thread.
 - Two accounts owned by the same person can trade wins.
 - Time is measured when the server receives a move. Network delay counts against a player, the
   same as in online chess.
+
+## Daily puzzle
+
+- One puzzle for everyone per UTC day, from a seed of the date.
+- Difficulty by weekday: Monday and Tuesday Medium; Wednesday to Friday Hard; Saturday and
+  Sunday Extreme.
+- **One attempt per account**, timed by the server from Start. The clock keeps running if you
+  leave.
+- 3 mistakes and you're out; 90-minute cap.
+- The daily board ranks solves by time. Guests can play but aren't on it.
+- After a server restart, an attempt in progress is lost and can be started again.
+
+## Time stats and leaderboards
+
+Only server-timed solves count: race solves (including "keep going" finishes) and daily
+solves. Solo times are kept on the device only.
+
+- **Your times** (per difficulty):
+  - median, average, fastest, and the times of your best 25%, 10% and 5% of solves;
+  - after 5 solves, "faster than X% of players", comparing medians with every other player
+    who has 5 or more.
+- **Ranks tab:**
+  - Rating (everyone with a rated game; `?` while provisional).
+  - Fastest single solve and best median (needs 10 solves all-time, 5 this week). Both have
+    all-time and this-week (Monday UTC) views.
+  - Today's daily board.
+- **Graphs:** your rating after every rated game, per difficulty. After a race, a replay chart
+  of both players' progress over time, with mistakes marked.
 
 ## Friend games
 
@@ -123,16 +174,29 @@ The server keeps 4 ready puzzles per tier, made on a worker thread.
 
 ## Stats (accounts)
 
-- Rating, games, wins, losses, draws and peak, per difficulty.
-- All-game won/lost/drawn.
-- Current and best win streak.
-- Fastest solve per difficulty.
-- The last 20 games.
+- Rating, tier, games, wins, losses, draws and peak, per difficulty.
+- All-game won/lost/drawn, current and best win streak, the last 20 games.
 
-## Customization
+## Feel and customization
 
-- **Free now:** avatar (12 symbols × 8 colors) and board theme (Night, Paper, Slate, Ocean). Pressing a cell shades its row, column and box gray, fading with distance. The pressed cell is dark blue and every copy of the chosen number is blue. Nothing shows where a number can still go.
-  Saved on the account, or on the device for guests.
+- **Highlighting:** only what a player could see on paper. A pressed cell shades its row,
+  column and box gray, fading with distance; the pressed cell is dark blue and every copy of
+  the chosen number is the accent color. Nothing shows where a number can still go.
+- **Feedback:**
+  - A correct digit pops.
+  - A finished row, column or box ripples.
+  - A mistake shakes the board.
+  - A win throws confetti.
+  - The countdown ticks.
+  - Sound and vibration are on by default. Vibration uses Capacitor Haptics in the apps.
+- **Settings** (on the device): sound, vibration, numbers-left counts on the pad (default on).
+- **Look (free):**
+  - avatar (12 symbols × 8 colors) and theme (Night, Paper, Slate, Ocean), saved on the
+    account;
+  - accent (Blue, Indigo, Teal, Violet, Rose), board style (Classic, Tiles, Minimal) and
+    number font (Clean, Rounded, Mono, Serif), saved on the device.
+- **Facts line:** a rotating fact or tip in the middle of Play and on every waiting screen.
+  The facts are checked; see the memory file SB2. Lines are short.
 - **Paid later:** extra customization in a shop. Not built.
 
 ## Accounts
@@ -140,7 +204,8 @@ The server keeps 4 ready puzzles per tier, made on a worker thread.
 - Username: 3–16 letters, digits or `_`, unique regardless of case. Names starting with "guest"
   are reserved.
 - Password: 8–128 characters, stored as a salted scrypt hash.
-- Sessions use random 256-bit tokens, stored hashed.
+- Sessions use random 256-bit tokens, stored hashed, and expire after 90 days unused.
+- The database schema is versioned (`PRAGMA user_version`); migrations run in order at start.
 - Rate limits: 10 logins per 15 min per address and name, 5 sign-ups per hour per address, and
   30 friend requests per hour.
 

@@ -176,7 +176,7 @@ class Store {
     prep('fastest', `SELECT s.user_id, u.name, u.avatar, MIN(s.time) AS time FROM solves s JOIN users u ON u.id = s.user_id
       WHERE s.difficulty = ? AND s.at >= ? GROUP BY s.user_id ORDER BY time LIMIT ?`);
     prep('leaders', `SELECT u.name, u.avatar, r.rating, r.rd, r.games FROM ratings r JOIN users u ON u.id = r.user_id
-      WHERE r.difficulty = ? AND r.rd <= ? ORDER BY r.rating DESC LIMIT ?`);
+      WHERE r.difficulty = ? AND r.games > 0 ORDER BY r.rating DESC LIMIT ?`);
   }
 
   tx(fn) {
@@ -270,7 +270,7 @@ class Store {
   dropFriend(me, them) { return this.q.dropFriend.run(...pair(me, them)).changes === 1; }
   friendsOf(id) { return this.q.friendsOf.all(id, id, id); }
 
-  leaders(difficulty, maxRd, limit) { return this.q.leaders.all(difficulty, maxRd, limit); }
+  leaders(difficulty, limit) { return this.q.leaders.all(difficulty, limit); }
 
   // Rating after each rated game, oldest first: [{difficulty, at, rating}].
   history(userId) { return this.q.history.all(userId, userId, userId); }
