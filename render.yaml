@@ -1,0 +1,17 @@
+# One-click free hosting on Render (render.com): New > Blueprint > pick this repository.
+# Free plan limits: the server sleeps after 15 idle minutes (the first visit then takes about
+# 30-60 s), and its disk is wiped on every restart, so accounts and ratings reset. Fine for
+# testing. For data that lasts, add a disk (paid) and set DB_FILE to a path on it.
+services:
+  - type: web
+    name: sudoku-battles
+    runtime: node
+    plan: free
+    branch: claude/focused-johnson-reou24
+    rootDir: app
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_VERSION
+        value: "22"

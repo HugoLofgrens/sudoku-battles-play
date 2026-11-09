@@ -1,0 +1,11 @@
+SUDOKU BATTLES - play on your Wi-Fi
+
+1. Install Node.js 22 LTS or newer from https://nodejs.org (one time).
+2. Double-click start.bat (Windows) or run ./start.sh (Mac/Linux).
+   If Windows asks about the firewall, allow "Private networks".
+3. The window shows two addresses:
+     This computer:  http://localhost:8080
+     Same Wi-Fi:     http://192.168.x.x:8080
+   Open the Wi-Fi one on any phone or computer on the same network, in the browser.
+   In the Android app, type it in the Server box on the Play tab.
+4. Keep the window open while you play. Accounts and ratings are saved in the data folder.

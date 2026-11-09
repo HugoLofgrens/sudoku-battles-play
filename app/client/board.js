@@ -132,7 +132,6 @@ export class Board {
   render() {
     const { v, n, given } = this, show = this.hover || this.active;
     const bad = this.free ? IDX.map(i => v[i] && !given[i] ? PEERS[i].some(j => v[j] === v[i]) : false) : null;
-    const blocked = show ? IDX.map(i => PEERS[i].some(j => v[j] === show)) : null;
     for (const i of IDX) {
       const e = this.cells[i], x = v[i], pend = this.pending.get(i);
       let cl = 'c';
@@ -141,11 +140,11 @@ export class Board {
       if (i === this.flash) cl += ' miss';
       if (given[i]) cl += ' given'; else if (x) cl += ' user'; else if (pend) cl += ' pend';
       if (bad && bad[i]) cl += ' bad';
-      // A pressed cell: its row, column and box go gray, strongest next to it.
-      // A number picked on the pad with no cell pressed: tint where it can still go.
+      // Only what a player could see on paper: the pressed cell's row, column and box (gray,
+      // strongest next to it) and every copy of the chosen number (blue). No hints about
+      // where a number can still go.
       if (show && x === show) cl += ' same';
-      else if (this.sel !== null) { if (PEERS[this.sel].includes(i)) cl += ' peer k' + fade(this.sel, i); }
-      else if (show) cl += x || blocked[i] ? ' dead' : ' cand';
+      else if (this.sel !== null && PEERS[this.sel].includes(i)) cl += ' peer k' + fade(this.sel, i);
       if (i === this.sel) cl += ' sel';
       e.className = cl;
       if (x || pend) e.textContent = x || pend;

@@ -42,8 +42,9 @@ try {
   await a.goto(base); await b.goto(base);
   await a.waitForFunction(() => document.querySelector('#me-name').textContent.startsWith('Guest'));
   check(await a.isDisabled('#find'), 'guests cannot press Find opponent');
+  check((await a.$$eval('[data-pref="rankedDiff"] button', bs => bs.map(b => b.textContent))).join() === 'Medium,Hard,Extreme', 'difficulties are Medium, Hard, Extreme');
   await a.screenshot({ path: SHOTS + '/1-home-guest.png' });
-  await a.click('[data-pref="friendDiff"] [data-v="easy"]');
+  await a.click('[data-pref="friendDiff"] [data-v="medium"]');
   await a.click('[data-pref="friendMistakes"] [data-v="3"]');
   await a.click('#make-link');
   await a.waitForSelector('#room-url');
@@ -110,7 +111,7 @@ try {
   check(true, 'friend request accepted, dane shows as online');
   await c.screenshot({ path: SHOTS + '/7-friends.png' });
 
-  for (const p of [c, d]) { await p.click('[data-tab="play"]'); await p.click('[data-pref="rankedDiff"] [data-v="easy"]'); await p.click('#find'); }
+  for (const p of [c, d]) { await p.click('[data-tab="play"]'); await p.click('[data-pref="rankedDiff"] [data-v="medium"]'); await p.click('#find'); }
   await c.waitForSelector('#q-time');
   await waitLive(c); await waitLive(d);
   check(/\d/.test(await c.textContent('#bar-opp .rt')), 'ranked race shows ratings');
@@ -140,6 +141,9 @@ try {
   await s.waitForFunction(() => !document.querySelector('#overlay').classList.contains('show'), null, { timeout: 15000 });
   check((await boardOf(s)).filter(Boolean).length > 17, 'solo hard puzzle generated in a worker');
   await s.screenshot({ path: SHOTS + '/10-solo.png' });
+  await s.click('#pad button:nth-child(4)');
+  check(await s.$$eval('#board .c', cs => cs.every(c => !/\b(cand|dead)\b/.test(c.className))), 'picking a number shows no hint about where it can go');
+  check(await s.$$eval('#board .c.same', cs => cs.length > 0 && cs.every(c => c.textContent === '4')), 'picking a number highlights every copy of it');
 
   // ---- the app build: client served from another origin, talking to the server ----
   const www = new URL('../mobile/www/', import.meta.url).pathname;
@@ -159,6 +163,19 @@ try {
   await m.click('[data-tab="play"]'); await m.click('#make-link');
   await m.waitForSelector('#room-url');
   check((await m.inputValue('#room-url')).startsWith('https://play.example/#r='), 'app build reaches the server cross-origin, logs in, shares a web link');
+  // The phone app with no built-in server: the player types the address of the computer.
+  execFileSync('node', [new URL('../mobile/build.mjs', import.meta.url).pathname], { env: { ...process.env, SERVER_URL: '' } });
+  const n = await page('N');
+  await n.addInitScript(() => { window.Capacitor = { isNativePlatform: () => true }; });
+  await n.goto(`http://127.0.0.1:${shell.address().port}/`);
+  await n.waitForSelector('#server-card:not([hidden])');
+  check((await n.textContent('#server-info')).includes('Type the address'), 'app without a server asks for an address');
+  await n.fill('#server-addr', base.replace('http://', '').slice(0, -1));
+  await n.click('#server-go');
+  await n.waitForFunction(() => document.querySelector('#me-name').textContent.startsWith('Guest'));
+  check((await n.textContent('#server-info')).startsWith('Connected to http://127.0.0.1'), 'app connects to a typed LAN address');
+  await n.click('#make-link'); await n.waitForSelector('#room-url');
+  check((await n.inputValue('#room-url')).startsWith(base + '#r='), 'its share link points at that server');
   shell.close();
 
   check(errors.length === 0, 'no page errors' + (errors.length ? ': ' + errors.join(' | ') : ''));

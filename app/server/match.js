@@ -7,7 +7,7 @@ export const RULES = {
   noShowMs: 20000,          // a player who never connects in this window aborts the match
   graceMs: 30000,           // a dropped player has this long to come back
   abortWindowMs: 20000,     // from the start, a player who has not tried a cell may abort
-  capMs: { easy: 20 * 60e3, medium: 40 * 60e3, hard: 60 * 60e3 },
+  capMs: { medium: 40 * 60e3, hard: 60 * 60e3, extreme: 90 * 60e3 },
   mistakeOptions: [1, 3, 5],
   rankedMistakes: 3,
   maxMoveRate: 15           // placements per second per player; more is dropped

@@ -8,34 +8,53 @@ const store = {
   get(k, d = null) { try { const v = localStorage.getItem('sb-' + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
   set(k, v) { try { if (v == null) localStorage.removeItem('sb-' + k); else localStorage.setItem('sb-' + k, JSON.stringify(v)); } catch {} }
 };
-const DIFFS = [['easy', 'Easy'], ['medium', 'Medium'], ['hard', 'Hard']];
+const DIFFS = [['medium', 'Medium'], ['hard', 'Hard'], ['extreme', 'Extreme']];
 const clock = ms => { const s = Math.max(0, Math.floor(ms / 1000)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
 const ratingText = r => r ? r.rating + (r.provisional ? '?' : '') : '';
 const avatarHtml = (a, big) => { a = cleanAvatar(a); return `<span class="av${big ? ' big' : ''}" style="background:${AVATAR_COLORS[a.c]}">${AVATAR_SYMBOLS[a.s]}</span>`; };
 function paintAvatar(el, a) { a = cleanAvatar(a); el.style.background = AVATAR_COLORS[a.c]; el.textContent = AVATAR_SYMBOLS[a.s]; }
+
+// Saved choices from an older version (e.g. the removed easy tier) fall back to medium.
+function fixPrefs(p) {
+  for (const k of ['rankedDiff', 'friendDiff', 'soloDiff', 'boardDiff']) if (!DIFFS.some(d => d[0] === p[k])) p[k] = 'medium';
+  if (![1, 3, 5].includes(p.friendMistakes)) p.friendMistakes = 3;
+  return p;
+}
 
 // ---------- state ----------
 const S = {
   token: store.get('token'), guestToken: store.get('guest'), me: null, ws: null, retry: 0,
   offset: 0, view: null, mode: 'menu', tab: 'play', keepGoing: null, queued: null, room: null,
   challenge: null, friends: [], soloStart: 0, solo: null,
-  prefs: { rankedDiff: 'easy', friendDiff: 'easy', friendMistakes: 3, soloDiff: 'medium', boardDiff: 'easy', ...store.get('prefs', {}) },
+  prefs: fixPrefs({ rankedDiff: 'medium', friendDiff: 'medium', friendMistakes: 3, soloDiff: 'medium', boardDiff: 'medium', ...store.get('prefs', {}) }),
   look: { avatar: cleanAvatar(store.get('look', {}).avatar), theme: cleanTheme(store.get('look', {}).theme) },
   pendingJoin: (/^#r=([A-Za-z0-9]{6})$/.exec(location.hash) || [])[1] || null
 };
 const serverNow = () => Date.now() + S.offset;
 
+// The browser version talks to the site it came from. The phone apps need an address: built in
+// (SERVER_URL), or typed in, e.g. the computer on your Wi-Fi running the server.
+const NATIVE = !!window.Capacitor?.isNativePlatform?.();
+const normServer = u => { u = String(u || '').trim().replace(/\/+$/, ''); return !u ? '' : /^https?:\/\//i.test(u) ? u : 'http://' + u; };
+let SERVER = normServer(store.get('server') || SERVER_URL);
+const shareBase = () => (store.get('server') ? SERVER + '/' : PUBLIC_URL || (NATIVE ? SERVER + '/' : location.origin + location.pathname));
+
 // ---------- network ----------
 function connect() {
-  const ws = new WebSocket(SERVER_URL ? SERVER_URL.replace(/^http/, 'ws') + '/ws' : (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
+  renderServer();
+  if (NATIVE && !SERVER) return;
+  let ws;
+  try { ws = new WebSocket(SERVER ? SERVER.replace(/^http/, 'ws') + '/ws' : (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws'); }
+  catch { S.online = false; renderServer(); return; }
   S.ws = ws;
-  ws.onopen = () => { S.retry = 0; ws.send(JSON.stringify({ t: 'hello', token: S.token || undefined, guest: S.token ? undefined : S.guestToken || undefined })); };
+  ws.onopen = () => { S.retry = 0; S.online = true; renderServer(); ws.send(JSON.stringify({ t: 'hello', token: S.token || undefined, guest: S.token ? undefined : S.guestToken || undefined })); };
   ws.onmessage = e => { let m; try { m = JSON.parse(e.data); } catch { return; } on[m.t]?.(m); };
   ws.onclose = ev => {
     if (S.ws !== ws) return;
-    S.ws = null;
+    S.ws = null; S.online = false;
     if (ev.code === 4000) return;                   // replaced by another tab; it shows its own sheet
-    setStatus('Reconnecting…');
+    if (S.mode !== 'menu') setStatus('Reconnecting…');
+    $('me-name').textContent = 'Connecting…'; renderServer();
     setTimeout(connect, Math.min(8000, 500 * 2 ** S.retry++));
   };
 }
@@ -43,7 +62,7 @@ const send = m => { if (S.ws && S.ws.readyState === 1) S.ws.send(JSON.stringify(
 function reconnect() { if (S.ws) { const w = S.ws; S.ws = null; w.close(); } connect(); }
 
 async function api(path, body) {
-  const r = await fetch(SERVER_URL + path, {
+  const r = await fetch(SERVER + path, {
     method: body === undefined ? 'GET' : 'POST',
     headers: { 'Content-Type': 'application/json', ...(S.token ? { Authorization: 'Bearer ' + S.token } : {}) },
     body: body === undefined ? undefined : JSON.stringify(body)
@@ -85,6 +104,21 @@ const on = {
   placed(m) { if (S.mode === 'race') board.placed(m.cell, m.digit, m.ok); },
   pong(m) { S.offset = m.serverNow - Date.now(); }
 };
+
+// ---------- server address (apps only) ----------
+function renderServer() {
+  $('server-card').hidden = !NATIVE;
+  if (!NATIVE) return;
+  $('server-info').textContent = !SERVER ? 'Type the address the server shows on the computer running it. Solo works without one.'
+    : S.online ? 'Connected to ' + SERVER : 'Trying to reach ' + SERVER + '…';
+  if (document.activeElement !== $('server-addr')) $('server-addr').value = SERVER.replace(/^http:\/\//, '');
+}
+$('server-go').onclick = () => {
+  SERVER = normServer($('server-addr').value);
+  store.set('server', SERVER || null);
+  S.me = null; reconnect();
+};
+$('server-addr').onkeydown = e => { if (e.key === 'Enter') $('server-go').click(); };
 
 // ---------- look ----------
 function applyTheme() {
@@ -177,7 +211,7 @@ function showSearching() {
   $('q-cancel').onclick = () => send({ t: 'unqueue' });
 }
 function showRoom() {
-  const r = S.room, url = (PUBLIC_URL || location.origin + location.pathname) + '#r=' + r.code;
+  const r = S.room, url = shareBase() + '#r=' + r.code;
   const rules = `${DIFFS.find(d => d[0] === r.rules.difficulty)[1]} · ${r.rules.mistakes} mistake${r.rules.mistakes > 1 ? 's' : ''}`;
   if (r.invite) {
     showSheet(`<h2>Waiting for ${esc(r.invite)}</h2><div class="spin"></div><p class="dim" style="text-align:center">${rules}</p><button id="room-cancel">Cancel</button>`);
@@ -297,7 +331,7 @@ async function loadProfile() {
   $('p-recent').innerHTML = p.recent.map(g => {
     const delta = g.ratingAfter != null ? g.ratingAfter - g.ratingBefore : null;
     return `<div class="item"><span class="${g.result}" style="width:44px;font-weight:700">${g.result === 'win' ? 'Won' : g.result === 'loss' ? 'Lost' : 'Draw'}</span>
-      <span class="grow">vs ${esc(g.opponent)}<br><span class="dim">${DIFFS.find(d => d[0] === g.difficulty)[1]} · ${g.kind === 'ranked' ? 'Ranked' : 'Friend'} · ${reasonShort(g.reason)}</span></span>
+      <span class="grow">vs ${esc(g.opponent)}<br><span class="dim">${(DIFFS.find(d => d[0] === g.difficulty) || [, g.difficulty])[1]} · ${g.kind === 'ranked' ? 'Ranked' : 'Friend'} · ${reasonShort(g.reason)}</span></span>
       <span style="text-align:right">${g.time != null ? clock(g.time) : '–'}<br><span class="dim">${delta == null ? '' : (delta >= 0 ? '+' : '') + delta}</span></span></div>`;
   }).join('');
 }

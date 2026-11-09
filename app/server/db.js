@@ -4,6 +4,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { START, idle, rateGame } from './glicko2.js';
+import { DIFFICULTIES } from '../shared/sudoku.js';
 
 export function openDb(file) {
   if (file !== ':memory:') mkdirSync(dirname(file), { recursive: true });
@@ -131,7 +132,7 @@ class Store {
   }
   ratings(userId, now) {
     const out = {};
-    for (const d of ['easy', 'medium', 'hard']) out[d] = this.rating(userId, d, now);
+    for (const d of DIFFICULTIES) out[d] = this.rating(userId, d, now);
     return out;
   }
 

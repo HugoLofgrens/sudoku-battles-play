@@ -3,11 +3,11 @@ import assert from 'node:assert/strict';
 import { Match, RULES } from '../server/match.js';
 import { generate } from '../shared/sudoku.js';
 
-const P = generate(12345, 'easy');
+const P = generate(12345, 'medium');
 function make(opts = {}) {
   const sent = [[], []];
   const m = new Match({
-    id: 'g1', kind: 'ranked', difficulty: 'easy', mistakes: 3, seed: P.seed, puzzle: P.puzzle, solution: P.solution,
+    id: 'g1', kind: 'ranked', difficulty: 'medium', mistakes: 3, seed: P.seed, puzzle: P.puzzle, solution: P.solution,
     players: [{ key: 'a', userId: 1, name: 'A' }, { key: 'b', userId: 2, name: 'B' }], now: 0,
     emit: (i, msg) => sent[i].push(msg), ...opts
   });
@@ -136,11 +136,11 @@ test('the time cap decides by progress, equal progress is a draw', () => {
   const m = make();
   const t = start(m);
   m.place(0, EMPTY[0], P.solution[EMPTY[0]], t + 1);
-  m.tick(t + RULES.capMs.easy);
+  m.tick(t + RULES.capMs.medium);
   assert.deepEqual([m.status, m.result.winner, m.result.reason], ['closed', 0, 'timeout']);
   const d = make();
   const t2 = start(d);
-  d.tick(t2 + RULES.capMs.easy);
+  d.tick(t2 + RULES.capMs.medium);
   assert.equal(d.result.winner, null);
 });
 

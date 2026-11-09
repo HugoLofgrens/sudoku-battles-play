@@ -58,8 +58,8 @@ test('register, login, bad login, duplicate names', async () => {
   const r = await api('/api/register', { method: 'POST', body: { name: 'alice', password: 'password1' } });
   assert.equal(r.status, 201);
   assert.ok(r.data.token);
-  assert.equal(r.data.me.ratings.easy.rating, 1500);
-  assert.equal(r.data.me.ratings.easy.provisional, true);
+  assert.equal(r.data.me.ratings.medium.rating, 1500);
+  assert.equal(r.data.me.ratings.medium.provisional, true);
   assert.equal((await api('/api/register', { method: 'POST', body: { name: 'ALICE', password: 'password1' } })).status, 409);
   assert.equal((await api('/api/register', { method: 'POST', body: { name: 'GuestBob', password: 'password1' } })).status, 400);
   assert.equal((await api('/api/register', { method: 'POST', body: { name: 'x', password: 'password1' } })).status, 400);
@@ -77,7 +77,7 @@ test('guests cannot play ranked', async () => {
   const g = await client({});
   assert.equal(g.welcome.me.guest, true);
   assert.match(g.welcome.me.name, /^Guest\d{4}$/);
-  g.send({ t: 'queue', difficulty: 'easy' });
+  g.send({ t: 'queue', difficulty: 'medium' });
   assert.equal((await g.wait(m => m.t === 'error')).code, 'login-required');
   g.close();
 });
@@ -86,8 +86,8 @@ test('a full ranked race: first to solve wins, ratings move once, stats record i
   const a = (await api('/api/register', { method: 'POST', body: { name: 'racer_a', password: 'password1' } })).data;
   const b = (await api('/api/register', { method: 'POST', body: { name: 'racer_b', password: 'password1' } })).data;
   const ca = await client({ token: a.token }), cb = await client({ token: b.token });
-  ca.send({ t: 'queue', difficulty: 'easy' });
-  cb.send({ t: 'queue', difficulty: 'easy' });
+  ca.send({ t: 'queue', difficulty: 'medium' });
+  cb.send({ t: 'queue', difficulty: 'medium' });
   await ca.wait(m => m.t === 'queued');
   app.matchmake();
   const ga = await ca.wait(live), gb = await cb.wait(live);
@@ -118,22 +118,22 @@ test('a full ranked race: first to solve wins, ratings move once, stats record i
   cb.send({ t: 'resign' });
   await cb.wait(m => m.t === 'game' && m.status === 'closed');
   const pa = (await api('/api/profile/racer_a')).data;
-  assert.equal(pa.ratings.easy.games, 1);
-  assert.equal(pa.ratings.easy.wins, 1);
-  assert.ok(pa.ratings.easy.rating > 1500);
+  assert.equal(pa.ratings.medium.games, 1);
+  assert.equal(pa.ratings.medium.wins, 1);
+  assert.ok(pa.ratings.medium.rating > 1500);
   assert.equal(pa.recent[0].result, 'win');
-  assert.ok(pa.bestTimes.easy > 0);
+  assert.ok(pa.bestTimes.medium > 0);
   assert.equal(pa.streak, 1);
   const pb = (await api('/api/profile/racer_b')).data;
-  assert.equal(pb.ratings.easy.losses, 1);
-  assert.equal(pa.ratings.easy.rating - 1500, 1500 - pb.ratings.easy.rating);
-  assert.equal(pa.ratings.medium.games, 0, 'other difficulties untouched');
+  assert.equal(pb.ratings.medium.losses, 1);
+  assert.equal(pa.ratings.medium.rating - 1500, 1500 - pb.ratings.medium.rating);
+  assert.equal(pa.ratings.hard.games, 0, 'other difficulties untouched');
   ca.close(); cb.close();
 });
 
 test('friend game by link between two guests, with rematch', async () => {
   const h = await client({}), j = await client({});
-  h.send({ t: 'room.create', difficulty: 'easy', mistakes: 1 });
+  h.send({ t: 'room.create', difficulty: 'medium', mistakes: 1 });
   const room = await h.wait(m => m.t === 'room');
   assert.match(room.code, /^[A-Z2-9]{6}$/);
   h.send({ t: 'room.join', code: room.code });

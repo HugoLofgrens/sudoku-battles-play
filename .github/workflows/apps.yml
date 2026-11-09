@@ -1,6 +1,7 @@
-# Tests the server, then builds the Android and iOS apps. No Mac needed: iOS builds on GitHub's macOS machines.
-# Set the repository variable SERVER_URL (Settings > Secrets and variables > Actions > Variables)
-# once the server is online; until then the apps point at a placeholder and only solo works.
+# Tests the server, then builds three downloads: the Wi-Fi (LAN) package, the Android app and
+# an iOS build check. No Mac needed: iOS builds on GitHub's macOS machines.
+# Optional repository variable SERVER_URL (Settings > Secrets and variables > Actions > Variables):
+# the online server the apps connect to. Without it the apps ask for an address (LAN play).
 name: apps
 
 on:
@@ -9,7 +10,7 @@ on:
   workflow_dispatch:
 
 env:
-  SERVER_URL: ${{ vars.SERVER_URL || 'https://sudoku-battles.invalid' }}
+  SERVER_URL: ${{ vars.SERVER_URL }}
 
 jobs:
   test:
@@ -21,6 +22,23 @@ jobs:
         with: { node-version: 22 }
       - run: npm ci
       - run: npm test
+
+  lan:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Package the server with its one dependency
+        run: |
+          cd app && npm ci --omit=dev && cd ..
+          mkdir -p dist/sudoku-battles
+          cp -r app/server app/client app/shared app/node_modules app/package.json app/start.bat app/start.sh app/PLAY-ON-WIFI.txt dist/sudoku-battles/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sudoku-battles-wifi
+          path: dist
 
   android:
     needs: test

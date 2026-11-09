@@ -115,10 +115,46 @@ function grade(p) {
     return false;
   }
 
+  // Swordfish: the X-wing pattern over three rows (or columns) instead of two.
+  function swordfish() {
+    for (const [from, to] of [[0, 9], [9, 0]]) for (let d = 1; d <= 9; d++) {
+      const lines = [];
+      for (let k = 0; k < 9; k++) {
+        const p = []; HOUSES[from + k].forEach((i, n) => { if (c[i] >> d & 1) p.push(n); });
+        if (p.length >= 2 && p.length <= 3) lines.push([k, p]);
+      }
+      for (const trio of combos(lines, 3)) {
+        const cols = [...new Set(trio.flatMap(t => t[1]))];
+        if (cols.length !== 3) continue;
+        const skip = new Set(trio.flatMap(t => HOUSES[from + t[0]]));
+        let ch = false;
+        for (const n of cols) ch = strip(HOUSES[to + n].filter(i => !skip.has(i)), 1 << d) || ch;
+        if (ch) return true;
+      }
+    }
+    return false;
+  }
+  // XY-wing: a two-candidate pivot {x,y} sees pincers {x,z} and {y,z}; z leaves every cell
+  // that sees both pincers.
+  function xywing() {
+    const two = IDX.filter(i => pop(c[i]) === 2);
+    for (const p of two) {
+      const wings = two.filter(i => i !== p && PEERS[p].includes(i) && pop(c[i] & c[p]) === 1);
+      for (let a = 0; a < wings.length; a++) for (let b = a + 1; b < wings.length; b++) {
+        const A = wings[a], Bc = wings[b], z = c[A] & c[Bc] & ~c[p];
+        if (pop(z) !== 1 || (c[A] & c[p]) === (c[Bc] & c[p])) continue;
+        if (strip(PEERS[A].filter(i => i !== Bc && PEERS[Bc].includes(i)), z)) return true;
+      }
+    }
+    return false;
+  }
+
   let level = 0, hard = 0;
-  const steps = [[singles, 1], [locked, 2], [() => subsets(2), 3], [() => subsets(3), 4], [xwing, 5]];
+  // New techniques go at the end: they only run when everything before them is stuck, so
+  // puzzles that older levels could solve are graded exactly as before.
+  const steps = [[singles, 1], [locked, 2], [() => subsets(2), 3], [() => subsets(3), 4], [xwing, 5], [swordfish, 6], [xywing, 7]];
   for (;;) {
-    if (g.every(Boolean)) return { solved: true, level, hard };
+    if (g.every(Boolean)) return { solved: true, level, hard, grid: g };
     let moved = false;
     for (const [fn, lv] of steps) if (fn()) { level = Math.max(level, lv); if (lv >= 3) hard++; moved = true; break; }
     if (!moved) return { solved: false, level, hard };
@@ -140,18 +176,20 @@ function dig(rng, minClues = 0) {
 }
 // Bump when anything above changes: the same seed then gives a different puzzle.
 // Bump when anything above changes: the same seed then gives a different puzzle.
-export const GENERATOR_VERSION = 1;
+// 2: easy removed, extreme added, grader learned swordfish and XY-wing. Medium and hard give
+//    the same puzzle per seed as version 1 (they reject anything that needs the new steps).
+export const GENERATOR_VERSION = 2;
 const MIN_HARD = 3;
 
 // Difficulty tiers. Each test only looks at the puzzle, so a seed maps to one puzzle per tier.
-//   easy:   at least 36 clues, needs nothing past locked candidates (the old battle puzzles)
-//   medium: fully dug, needs locked candidates or naked/hidden pairs, nothing harder
-//   hard:   needs triples or X-wing, or 3+ pair-level steps (the old solo puzzles)
-export const DIFFICULTIES = ['easy', 'medium', 'hard'];
+//   medium:  needs locked candidates or naked/hidden pairs, nothing harder
+//   hard:    needs triples or X-wing, or 3+ pair-level steps (the old solo puzzles)
+//   extreme: needs swordfish or XY-wing
+export const DIFFICULTIES = ['medium', 'hard', 'extreme'];
 const TIERS = {
-  easy:   { minClues: 36, ok: r => r.solved && r.level <= 2 },
-  medium: { minClues: 0,  ok: r => r.solved && r.level >= 2 && r.level <= 3 && r.hard < MIN_HARD },
-  hard:   { minClues: 0,  ok: r => r.solved && (r.level >= 4 || r.hard >= MIN_HARD) }
+  medium:  { minClues: 0, ok: r => r.solved && r.level >= 2 && r.level <= 3 && r.hard < MIN_HARD },
+  hard:    { minClues: 0, ok: r => r.solved && r.level <= 5 && (r.level >= 4 || r.hard >= MIN_HARD) },
+  extreme: { minClues: 0, ok: r => r.solved && r.level >= 6 }
 };
 
 export function generate(seed, difficulty) {

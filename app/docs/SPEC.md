@@ -36,7 +36,7 @@ friends, custom rules for friend games. Extras come later.
 | A player reaches the mistake limit | The other wins (`mistakes`) |
 | A player gives up | The other wins (`resign`) |
 | A player is disconnected for 30 s | The other wins (`disconnect`) |
-| Time cap reached (easy 20 min, medium 40, hard 60) | More cells filled wins; equal is a draw (`timeout`) |
+| Time cap reached (medium 40 min, hard 60, extreme 90) | More cells filled wins; equal is a draw (`timeout`) |
 
 After the result, a player who is still on the board gets a prompt: **Keep going** (finish
 for their own time, which does not change the result) or **Stop**. The game closes when both
@@ -63,9 +63,12 @@ same puzzle, with exactly one solution.
 
 | Tier | Rule |
 |---|---|
-| Easy | 36+ clues, needs nothing past locked candidates |
-| Medium | Fully dug, needs locked candidates or pairs, nothing harder |
+| Medium | Needs locked candidates or pairs, nothing harder |
 | Hard | Needs triples or X-wing, or 3+ pair-level steps (the prototype's solo puzzles) |
+| Extreme | Needs swordfish or XY-wing |
+
+There is no easy tier. Every puzzle has exactly one solution, and a logical solver checks it,
+so no puzzle needs guessing.
 
 The server keeps 4 ready puzzles per tier, made on a worker thread.
 
@@ -128,7 +131,7 @@ The server keeps 4 ready puzzles per tier, made on a worker thread.
 
 ## Customization
 
-- **Free now:** avatar (12 symbols × 8 colors) and board theme (Night, Paper, Slate, Ocean). Pressing a cell shades its row, column and box gray, fading with distance; the pressed cell is dark blue, matching numbers blue.
+- **Free now:** avatar (12 symbols × 8 colors) and board theme (Night, Paper, Slate, Ocean). Pressing a cell shades its row, column and box gray, fading with distance. The pressed cell is dark blue and every copy of the chosen number is blue. Nothing shows where a number can still go.
   Saved on the account, or on the device for guests.
 - **Paid later:** extra customization in a shop. Not built.
 
